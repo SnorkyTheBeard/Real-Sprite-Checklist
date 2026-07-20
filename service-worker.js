@@ -1,11 +1,11 @@
-const CACHE = 'galaxy-sprite-checklist-v40';
+const CACHE = 'galaxy-sprite-checklist-v41';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=49',
+  './styles.css?v=50',
   './published-design.js',
-  './data.js?v=49',
-  './app.js?v=49',
+  './data.js?v=50',
+  './app.js?v=50',
   './manifest.webmanifest',
   './fonts/comic-neue-regular.woff2',
   './fonts/comic-neue-bold.woff2',
@@ -48,16 +48,16 @@ self.addEventListener('fetch', (event) => {
   if (requestUrl.pathname.endsWith('/published-design.js')) {
     const cacheKey = new URL(event.request.url);
     cacheKey.search = '';
-    const networkUpdate = caches.open(CACHE).then((cache) =>
-      fetch(event.request,{ cache:'no-cache' }).then(async (response) => {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE);
+      try {
+        const response = await fetch(event.request,{ cache:'no-cache' });
         if (response.ok) await cache.put(cacheKey.toString(),response.clone());
         return response;
-      })
-    );
-    event.waitUntil(networkUpdate.catch(() => null));
-    event.respondWith(
-      caches.match(cacheKey.toString()).then((cached) => preferFreshWithin(networkUpdate,cached))
-    );
+      } catch {
+        return (await cache.match(cacheKey.toString())) || Response.error();
+      }
+    })());
     return;
   }
 

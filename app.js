@@ -234,13 +234,49 @@
     if (!saved) selected = published || {};
     else if (!published || !Object.keys(published).length) selected = saved;
     else {
-      const localUpdatedAt = Number(saved._meta?.localUpdatedAt || 0);
+      const localUpdatedAt = Math.max(
+        Number(saved._meta?.localUpdatedAt || 0),
+        Number(saved._meta?.publishedAt || 0)
+      );
       const publishedAt = Number(published._meta?.publishedAt || 0);
       selected = !saved._meta || publishedAt >= localUpdatedAt ? published : saved;
     }
     const normalized = normalizeDesign(selected);
-    try { localStorage.setItem(DESIGN_KEY,JSON.stringify(normalized)); } catch {}
+    persistDesignValue(normalized);
     return normalized;
+  }
+
+  function clearObsoleteDesignCaches() {
+    if (MIGRATE_LEGACY_INSTALLATION) return 0;
+    const obsoleteKeys = [];
+    try {
+      for (let index = 0; index < localStorage.length; index += 1) {
+        const key = localStorage.key(index);
+        if (!key || key === DESIGN_KEY) continue;
+        if (key === LEGACY_DESIGN_KEY || key.startsWith('galaxy_sprite_tracker_design_v2_')) obsoleteKeys.push(key);
+      }
+      obsoleteKeys.forEach((key) => localStorage.removeItem(key));
+      return obsoleteKeys.length;
+    } catch {
+      return 0;
+    }
+  }
+
+  function persistDesignValue(value, { recoverQuota = true } = {}) {
+    const serialized = JSON.stringify(value);
+    try {
+      localStorage.setItem(DESIGN_KEY,serialized);
+      return { saved:true, cleaned:0 };
+    } catch {
+      const cleaned = recoverQuota ? clearObsoleteDesignCaches() : 0;
+      if (!cleaned) return { saved:false, cleaned:0 };
+      try {
+        localStorage.setItem(DESIGN_KEY,serialized);
+        return { saved:true, cleaned };
+      } catch {
+        return { saved:false, cleaned };
+      }
+    }
   }
 
   function hasOwn(object, key) {
@@ -266,16 +302,15 @@
   }
 
   function saveDesign({ silent = false } = {}) {
-    try {
-      design._meta ||= {};
-      design._meta.localUpdatedAt = Date.now();
-      localStorage.setItem(DESIGN_KEY, JSON.stringify(design));
+    design._meta ||= {};
+    design._meta.localUpdatedAt = Date.now();
+    const result = persistDesignValue(design);
+    if (result.saved) {
       scheduleCloudSync();
       return true;
-    } catch {
-      if (!silent) showSaveFailure('This design could not be saved because the browser is out of storage. Remove an unused image or try a smaller one.');
-      return false;
     }
+    if (!silent) showSaveFailure('This design is larger than this browser can keep locally. Publish the current design, or remove one unused image, then save again.');
+    return false;
   }
 
   function rarityFromHash() {
@@ -2195,8 +2230,7 @@
     if (publication.replacements?.size) visitDesignStrings(design,(value) => publication.replacements.get(value) || value);
     design._meta ||= {};
     design._meta.publishedAt = publication.publishedAt;
-    try { localStorage.setItem(DESIGN_KEY,JSON.stringify(design)); }
-    catch { showSaveFailure('The design published, but Safari could not refresh its local copy. Reload the page once to clear the older oversized copy.'); }
+    if (!persistDesignValue(design).saved) showSaveFailure('The design published, but Safari could not refresh its local copy. Reload the page once to clear the older oversized copy.');
   }
 
   async function publishDesignToGitHub(settings) {
@@ -2311,7 +2345,7 @@
       if (!remoteAt || remoteAt <= currentAt) return;
       window.PUBLISHED_DESIGN = remote;
       design = normalizeDesign(remote);
-      try { localStorage.setItem(DESIGN_KEY,JSON.stringify(design)); } catch {}
+      persistDesignValue(design);
       renderAll();
       showToast('The public design was updated');
     } catch {}
@@ -3061,7 +3095,7 @@
   renderAll();
   const activeHash = `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=40').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=41').catch(() => {});
   setTimeout(checkForPublishedDesignUpdate,2500);
   setInterval(checkForPublishedDesignUpdate,45000);
   window.addEventListener('online',checkForPublishedDesignUpdate);

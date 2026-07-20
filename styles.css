@@ -21,7 +21,7 @@
   --theme-text:#f9f001;
   --theme-muted:#c8c3e5;
   --theme-body-bg:#050505;
-  --theme-body-image:url("published-assets/theme-body-bg-image.webp");
+  --theme-body-image:none;
   --theme-body-size:cover;
   --theme-header-bg:#21184d;
   --theme-header-image:none;
@@ -117,6 +117,7 @@ body.edit-mode .editor-only { display:flex!important; }
 html.app-booting .hero > :not(.edit-chip),
 html.app-booting .page-head,
 html.app-booting footer { visibility:hidden; }
+html.app-booting .hero { background-image:none!important; }
 .skip-link { position:fixed; left:12px; top:8px; z-index:100; transform:translateY(-140%); padding:10px 14px; color:#10122f; background:#fff; border-radius:10px; font-weight:900; }
 .skip-link:focus { transform:translateY(0); }
 .app-shell { --shell-inline:12px; position:relative; z-index:1; width:min(100%,1080px); margin:0 auto; padding:calc(14px + var(--safe-top)) var(--shell-inline) calc(34px + var(--safe-bottom)); }

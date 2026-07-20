@@ -99,6 +99,18 @@
   const VARIANT_BACKGROUND_PRESET_MAP = Object.fromEntries(VARIANT_BACKGROUND_PRESETS.map((preset) => [preset.key,preset]));
   const DEFAULT_VARIANT_BACKGROUNDS = Object.fromEntries(VARIANT_BACKGROUND_PRESETS.map((preset) => [preset.key,preset.image]));
 
+  const PAGE_BACKGROUND_PACK_VERSION = 1;
+  const PAGE_BACKGROUND_PRESETS = {
+    Rare:{ color:'#071a3c', image:'assets/page-backgrounds/page-bg-rare.webp', mode:'tile' },
+    Epic:{ color:'#170b38', image:'assets/page-backgrounds/page-bg-epic.webp', mode:'tile' },
+    Legendary:{ color:'#160f08', image:'assets/page-backgrounds/page-bg-legendary.webp', mode:'tile' },
+    Mythic:{ color:'#16091d', image:'assets/page-backgrounds/page-bg-mythic.webp', mode:'tile' }
+  };
+  const DEFAULT_PAGE_BACKGROUNDS = Object.fromEntries(rarities.map((rarity) => [rarity,{
+    enabled:true,
+    ...(PAGE_BACKGROUND_PRESETS[rarity] || { color:'#080a24', image:'', mode:'cover' })
+  }]));
+
   const DEFAULT_THEME = {
     bodyFont:'system', headingFont:'system', buttonFont:'system', customFontData:'', customFontName:'',
     baseSize:16, titleSize:48, pageTitleSize:34, groupTitleSize:20, spriteLabelSize:16, checklistButtonSize:16, textColor:'#ffffff', mutedColor:'#c8c3e5',
@@ -112,7 +124,8 @@
     summaryStyle:'text', summaryFont:'body', summaryTextEffect:'shadow', summaryEffectColor:'#000000', summaryEffectStrength:6, summaryNumberSize:20, summaryLabelSize:12, summaryNumberColor:'#ffffff', summaryLabelColor:'#c8c3e5', summaryBgColor:'#302b5c', summaryBorderColor:'#564d80', summaryRadius:16, summaryOpacity:100, summaryShowBars:false,
     buttonBgColor:'#ffffff', buttonTextColor:'#33234e', accentColor:'#59c8ff',
     leftArt:'', rightArt:'', artWidth:120,
-    pageBackgrounds:Object.fromEntries(rarities.map((rarity) => [rarity,{ enabled:false, color:'#080a24', image:'', mode:'cover' }])),
+    pageBackgroundPackVersion:PAGE_BACKGROUND_PACK_VERSION,
+    pageBackgrounds:DEFAULT_PAGE_BACKGROUNDS,
     pageHeaderBackgrounds:Object.fromEntries(rarities.map((rarity) => [rarity,{ enabled:false, image:'', mode:'cover', position:'center' }]))
   };
 
@@ -234,6 +247,25 @@
     return backgrounds;
   }
 
+  function normalizePageBackgrounds(storedTheme = {}) {
+    const alreadyInstalled = Number(storedTheme.pageBackgroundPackVersion || 0) >= PAGE_BACKGROUND_PACK_VERSION;
+    return Object.fromEntries(rarities.map((rarity) => {
+      const preset = DEFAULT_PAGE_BACKGROUNDS[rarity];
+      const stored = storedTheme.pageBackgrounds?.[rarity] || {};
+      const normalized = { ...preset, ...stored };
+      if (!alreadyInstalled) {
+        const hasCustomImage = typeof stored.image === 'string' && Boolean(stored.image.trim());
+        normalized.enabled = true;
+        if (!hasCustomImage) {
+          normalized.color = preset.color;
+          normalized.image = preset.image;
+          normalized.mode = preset.mode;
+        }
+      }
+      return [rarity,normalized];
+    }));
+  }
+
   function normalizeDesign(stored = {}) {
     const storedTheme = stored.theme || {};
     const storedHeader = stored.header || {};
@@ -247,7 +279,8 @@
         ...DEFAULT_THEME,
         ...storedTheme,
         variantBackgrounds:normalizeVariantBackgrounds(storedTheme.variantBackgrounds),
-        pageBackgrounds:Object.fromEntries(rarities.map((rarity) => [rarity,{ ...DEFAULT_THEME.pageBackgrounds[rarity], ...(storedTheme.pageBackgrounds?.[rarity] || {}) }])),
+        pageBackgroundPackVersion:PAGE_BACKGROUND_PACK_VERSION,
+        pageBackgrounds:normalizePageBackgrounds(storedTheme),
         pageHeaderBackgrounds:Object.fromEntries(rarities.map((rarity) => {
           const pageHeader = { ...DEFAULT_THEME.pageHeaderBackgrounds[rarity], ...(storedTheme.pageHeaderBackgrounds?.[rarity] || {}) };
           return [rarity,{ ...pageHeader, enabled:Boolean(pageHeader.enabled && pageHeader.image) }];
@@ -487,6 +520,7 @@
 
   function imageMode(mode) {
     if (mode === 'contain') return { size:'contain', repeat:'no-repeat' };
+    if (mode === 'tile') return { size:'600px 600px', repeat:'repeat' };
     if (mode === 'repeat') return { size:'auto', repeat:'repeat' };
     if (mode === 'stretch') return { size:'100% 100%', repeat:'no-repeat' };
     return { size:'cover', repeat:'no-repeat' };
@@ -1618,7 +1652,7 @@
     const sizing = imageMode(document.getElementById('editPageBgMode').value);
     preview.style.backgroundColor = enabled ? document.getElementById('editPageBgColor').value : 'rgba(13,14,49,.72)';
     preview.style.backgroundImage = enabled && source ? `url("${displayImageSource(source)}")` : 'none';
-    preview.style.backgroundSize = sizing.size;
+    preview.style.backgroundSize = document.getElementById('editPageBgMode').value === 'tile' ? '220px 220px' : sizing.size;
     preview.style.backgroundRepeat = sizing.repeat;
     const values = {
       editPagePreviewEyebrow:document.getElementById('editPageEyebrow').value,
@@ -2934,8 +2968,20 @@
   });
   document.getElementById('removeEditPageBgBtn').addEventListener('click', () => {
     pendingPageBgImage = '';
+    document.getElementById('editPageBgFile').value = '';
     updatePageEditorLivePreview();
     setEditorStatus(document.getElementById('pageEditorForm'),`${activeRarity} background will be removed. Tap Save ${activeRarity} page to finish.`,'ready');
+  });
+  document.getElementById('restoreEditPageBgBtn').addEventListener('click', () => {
+    const preset = PAGE_BACKGROUND_PRESETS[activeRarity];
+    if (!preset) return;
+    pendingPageBgImage = preset.image;
+    document.getElementById('editPageBgEnabled').checked = true;
+    document.getElementById('editPageBgColor').value = preset.color;
+    document.getElementById('editPageBgMode').value = preset.mode;
+    document.getElementById('editPageBgFile').value = '';
+    updatePageEditorLivePreview();
+    setEditorStatus(document.getElementById('pageEditorForm'),`Included ${activeRarity} artwork selected. Tap Save ${activeRarity} page to finish.`,'ready');
   });
   ['editPageEyebrow','editPageTitle','editPageDescription','editPageBgEnabled','editPageBgColor','editPageBgMode','editPageHeaderEnabled','editPageHeaderMode','editPageHeaderPosition']
     .forEach((id) => document.getElementById(id).addEventListener('input',updatePageEditorLivePreview));
@@ -2970,6 +3016,7 @@
     pageBackground.color = document.getElementById('editPageBgColor').value;
     pageBackground.mode = document.getElementById('editPageBgMode').value;
     if (pendingPageBgImage !== undefined) pageBackground.image = pendingPageBgImage;
+    design.theme.pageBackgroundPackVersion = PAGE_BACKGROUND_PACK_VERSION;
     const pageHeader = design.theme.pageHeaderBackgrounds[activeRarity];
     pageHeader.enabled = document.getElementById('editPageHeaderEnabled').checked;
     pageHeader.mode = document.getElementById('editPageHeaderMode').value;
@@ -3321,7 +3368,7 @@
   renderAll();
   const activeHash = `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=42').catch(() => {});
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js?v=43').catch(() => {});
   setTimeout(checkForPublishedDesignUpdate,2500);
   setInterval(checkForPublishedDesignUpdate,45000);
   window.addEventListener('online',checkForPublishedDesignUpdate);

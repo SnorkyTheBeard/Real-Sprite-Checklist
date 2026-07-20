@@ -6,6 +6,7 @@ What is included
 - Owner-only visual editing, live previews, save confirmations, and automatic GitHub publishing.
 - Search, collection/mastery tracking, custom groups and boxes, image drop zones, and reorder controls.
 - Shared Base, Gold, Gummy, Galaxy, Cube, Gem, Quack, and Holofoil image-area backgrounds that apply automatically by variant name.
+- Separate Rare, Epic, Legendary, and Mythic cosmic checklist backgrounds that apply automatically and tile cleanly on long pages.
 - Native mobile scrolling, horizontal sprite rows, installable app icons, and offline caching.
 
 Clean first upload
@@ -29,7 +30,7 @@ Expected root files
 - README.txt
 
 Expected folders
-- assets — bundled interface artwork, including the shared variant-background pack
+- assets — bundled interface artwork, including the shared variant-background and rarity-page background packs
 - published-assets — public design artwork and the custom font
 - fonts — bundled fallback fonts
 - icons — home-screen and app icons
@@ -44,9 +45,10 @@ Owner editing and publishing
 2. Use the blue Edit button on the exact header, rarity page, group, or sprite you want to change.
 3. Use Whole-site defaults only for settings shared by every page.
 4. In Whole-site defaults, open Sprite image areas & variant backgrounds to replace a background once for every matching variant.
-5. Save buttons close a successful editor and show a visible saved notification.
-6. Automatic Sync detects the GitHub Pages repository name from the site address. Review the owner, repository, and branch before connecting.
-7. The owner key only unlocks this browser's editor. GitHub repository permissions and the repository-limited token protect the public site.
+5. In Edit Page, replace or restore the included background for only the Rare, Epic, Legendary, or Mythic page currently open.
+6. Save buttons close a successful editor and show a visible saved notification.
+7. Automatic Sync detects the GitHub Pages repository name from the site address. Review the owner, repository, and branch before connecting.
+8. The owner key only unlocks this browser's editor. GitHub repository permissions and the repository-limited token protect the public site.
 
 Browser storage behavior
 - Collection and mastery progress is private to each browser/device.
@@ -55,7 +57,7 @@ Browser storage behavior
 - Existing checklist progress is migrated when possible; use Download complete backup and Restore from backup when deliberately moving all local editor data.
 
 Recommended source-art sizes
-- Site or rarity background: 2400 × 1350 px.
+- Site or rarity background: 2400 × 1350 px for Cover, or 1200 × 1200 px for Seamless tile.
 - Header artwork: 2000 × 1000 px; keep important text/art near the center.
 - Group background: 2000 × 1400 px.
 - Sprite-card background: 1200 × 1500 px.
@@ -68,7 +70,7 @@ Images smaller than these sizes still work, but the app does not invent missing 
 
 Review checklist
 1. Open Rare, Epic, Legendary, and Mythic.
-2. Confirm every visible sprite image loads.
+2. Confirm each rarity has its own background and every visible sprite image loads.
 3. Swipe vertically starting over sprite artwork; the page should move.
 4. Swipe a sprite row left and right; the row should coast natively and reveal a complete final card.
 5. Mark one sprite In Collection and Mastered, reload, and confirm the mark remains.

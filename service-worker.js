@@ -1,11 +1,11 @@
-const CACHE = 'galaxy-sprite-checklist-v42';
+const CACHE = 'galaxy-sprite-checklist-v43';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=51',
+  './styles.css?v=52',
   './published-design.js',
-  './data.js?v=51',
-  './app.js?v=51',
+  './data.js?v=52',
+  './app.js?v=52',
   './manifest.webmanifest',
   './fonts/comic-neue-regular.woff2',
   './fonts/comic-neue-bold.woff2',
@@ -19,7 +19,11 @@ const CORE = [
   './assets/variant-backgrounds/variant-well-cube.webp',
   './assets/variant-backgrounds/variant-well-gem.webp',
   './assets/variant-backgrounds/variant-well-quack.webp',
-  './assets/variant-backgrounds/variant-well-holofoil.webp'
+  './assets/variant-backgrounds/variant-well-holofoil.webp',
+  './assets/page-backgrounds/page-bg-rare.webp',
+  './assets/page-backgrounds/page-bg-epic.webp',
+  './assets/page-backgrounds/page-bg-legendary.webp',
+  './assets/page-backgrounds/page-bg-mythic.webp'
 ];
 const FAST_NETWORK_BUDGET = 700;
 const FRESH_CODE_FILES = new Set(['styles.css','data.js','app.js','manifest.webmanifest']);

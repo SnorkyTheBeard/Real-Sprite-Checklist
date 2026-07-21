@@ -7,21 +7,21 @@
 window.SPRITE_ART_CONFIG = {
   siteBackground: { image: null, fit: null },
 
-  mainHeader: {
-    image: "assets/header/main-header.webp?v=3",
-    fit: "cover",
-    position: "center"
-  },
+ mainHeader: {
+  image: "",
+  fit: "cover",
+  position: "center"
+},
 
-  text: {
-    kicker: null,
-    title: null,
-    subtitle: null,
-    collectedLabel: null,
-    masteredLabel: null,
-    masterPrompt: null,
-    footerNote: null
-  },
+text: {
+  kicker: "",
+  title: "Sprite Tracker",
+  subtitle: "",
+  collectedLabel: "In Collection",
+  masteredLabel: "Mastered",
+  masterPrompt: null,
+  footerNote: null
+},
 
   pages: { Rare: null, Epic: null, Legendary: null, Mythic: null },
 

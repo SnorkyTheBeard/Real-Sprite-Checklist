@@ -8,7 +8,7 @@ window.SPRITE_ART_CONFIG = {
   siteBackground: { image: null, fit: null },
 
   mainHeader: {
-    image: "assets/header/main-header.webp",
+    image: "assets/header/main-header.webp?v=3",
     fit: "cover",
     position: "center"
   },

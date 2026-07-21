@@ -1,12 +1,12 @@
-const CACHE = 'galaxy-sprite-checklist-v45';
+const CACHE = 'galaxy-sprite-checklist-v46';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=55',
+  './styles.css?v=56',
   './published-design.js',
-  './art-config.js?v=55',
-  './data.js?v=55',
-  './app.js?v=55',
+  './art-config.js?v=56',
+  './data.js?v=56',
+  './app.js?v=56',
   './manifest.webmanifest',
   './fonts/comic-neue-regular.woff2',
   './fonts/comic-neue-bold.woff2',
@@ -25,9 +25,10 @@ const CORE = [
   './assets/page-backgrounds/page-bg-epic.webp',
   './assets/page-backgrounds/page-bg-legendary.webp',
   './assets/page-backgrounds/page-bg-mythic.webp',
-  './assets/header/main-header.webp?v=2'
+  './assets/header/main-header.webp?v=3'
 ];
 const FRESH_CODE_FILES = new Set(['styles.css','art-config.js','data.js','app.js','manifest.webmanifest']);
+const FRESH_ASSET_PATHS = ['/assets/header/','/assets/page-backgrounds/'];
 
 async function freshOrCached(networkRequest, cachedResponse) {
   try {
@@ -73,7 +74,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   const requestedFile = requestUrl.pathname.split('/').pop();
-  if (FRESH_CODE_FILES.has(requestedFile)) {
+  if (FRESH_CODE_FILES.has(requestedFile) || FRESH_ASSET_PATHS.some((path) => requestUrl.pathname.includes(path))) {
     const networkUpdate = caches.open(CACHE).then((cache) =>
       fetch(event.request,{ cache:'no-cache' }).then(async (response) => {
         if (response.ok) await cache.put(event.request,response.clone());

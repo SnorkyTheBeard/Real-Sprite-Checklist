@@ -13,7 +13,16 @@
 
   const STORAGE_SCOPE = appStorageScope();
   const PROGRESS_KEY = `galaxy_sprite_tracker_progress_v2_${STORAGE_SCOPE}`;
+  const SPRITE_CARD_EDITS_KEY = `galaxy_sprite_tracker_sprite_cards_v1_${STORAGE_SCOPE}`;
   const LEGACY_PROGRESS_KEY = 'galaxy_sprite_tracker_progress_v1';
+  const CARD_REORDER_MIME = 'application/x-sprite-card';
+  const GITHUB_TOKEN_SESSION_KEY = `galaxy_sprite_tracker_github_token_${STORAGE_SCOPE}`;
+  const GITHUB_API_VERSION = '2026-03-10';
+  const GITHUB_PUBLISH_TARGET = {
+    owner:'SnorkyTheBeard',
+    repo:'Sprite-Checklist-Clean',
+    branch:'main'
+  };
 
   function clearRetiredEditorStorage(storage) {
     if (!storage) return;
@@ -54,6 +63,13 @@
     if (!legacy) return {};
     try { localStorage.setItem(PROGRESS_KEY,JSON.stringify(legacy)); } catch { /* Keep it in memory. */ }
     return legacy;
+  }
+
+  function loadSpriteCardEdits() {
+    const saved = readJson(SPRITE_CARD_EDITS_KEY);
+    return {
+      families:saved?.families && typeof saved.families === 'object' ? saved.families : {}
+    };
   }
 
   const DEFAULT_HEADER = {
@@ -274,6 +290,8 @@
     window.SPRITE_ART_CONFIG
   );
   let state = loadProgress();
+  let spriteCardEdits = loadSpriteCardEdits();
+  let spriteEditMode = false;
   let activeRarity = rarityFromHash() || defaultRarity;
   let toastTimer = 0;
 
@@ -294,6 +312,16 @@
   const spriteSearchResults = document.getElementById('spriteSearchResults');
   const spriteSearchStatus = document.getElementById('spriteSearchStatus');
   const clearSpriteSearchBtn = document.getElementById('clearSpriteSearchBtn');
+  const spriteEditorToggle = document.getElementById('spriteEditorToggle');
+  const addSpriteDialog = document.getElementById('addSpriteDialog');
+  const addSpriteForm = document.getElementById('addSpriteForm');
+  const addSpriteFamilyId = document.getElementById('addSpriteFamilyId');
+  const newSpriteName = document.getElementById('newSpriteName');
+  const publishSpritesBtn = document.getElementById('publishSpritesBtn');
+  const publishSpritesDialog = document.getElementById('publishSpritesDialog');
+  const publishSpritesForm = document.getElementById('publishSpritesForm');
+  const githubTokenInput = document.getElementById('githubTokenInput');
+  const publishSpritesStatus = document.getElementById('publishSpritesStatus');
 
   function saveProgress() {
     try {
@@ -303,6 +331,31 @@
       showToast('Progress could not be saved in this browser.');
       return false;
     }
+  }
+
+  function saveSpriteCardEdits() {
+    try {
+      localStorage.setItem(SPRITE_CARD_EDITS_KEY,JSON.stringify(spriteCardEdits));
+      updatePublishButton();
+      return true;
+    } catch {
+      showToast('The sprite change could not be saved. Try a smaller image.');
+      return false;
+    }
+  }
+
+  function familyCardEdits(familyId) {
+    spriteCardEdits.families ||= {};
+    const existing = spriteCardEdits.families[familyId];
+    const edits = existing && typeof existing === 'object' && !Array.isArray(existing)
+      ? existing
+      : (spriteCardEdits.families[familyId] = {});
+    if (!Array.isArray(edits.added)) edits.added = [];
+    if (!Array.isArray(edits.deleted)) edits.deleted = [];
+    if (!Array.isArray(edits.order)) edits.order = [];
+    if (!Array.isArray(edits.publishedAdded)) edits.publishedAdded = [];
+    if (!edits.images || typeof edits.images !== 'object' || Array.isArray(edits.images)) edits.images = {};
+    return edits;
   }
 
   function rarityFromHash() {
@@ -334,11 +387,12 @@
 
   function variantView(family,variant) {
     const custom = design.families[family.id]?.variants?.[variant.id] || {};
+    const cardEdits = spriteCardEdits.families?.[family.id] || {};
     return {
       name:hasOwn(custom,'name') ? custom.name : variant.name,
-      image:hasOwn(custom,'image') ? custom.image : variant.image,
+      image:hasOwn(cardEdits.images,variant.id) ? cardEdits.images[variant.id] : (hasOwn(custom,'image') ? custom.image : variant.image),
       visible:hasOwn(custom,'visible') ? Boolean(custom.visible) : true,
-      deleted:Boolean(custom.deleted),
+      deleted:Boolean(custom.deleted) || (Array.isArray(cardEdits.deleted) && cardEdits.deleted.includes(variant.id)),
       customCard:Boolean(custom.customCard),
       cardColor:custom.cardColor || design.theme.cardBgColor,
       cardImage:hasOwn(custom,'cardImage') ? custom.cardImage : '',
@@ -349,8 +403,9 @@
   function familyVariants(family) {
     const base = Array.isArray(family.variants) ? family.variants : [];
     const added = Array.isArray(design.families[family.id]?.addedVariants) ? design.families[family.id].addedVariants : [];
+    const locallyAdded = Array.isArray(spriteCardEdits.families?.[family.id]?.added) ? spriteCardEdits.families[family.id].added : [];
     const unique = new Map();
-    [...base,...added].forEach((variant) => {
+    [...base,...added,...locallyAdded].forEach((variant) => {
       if (variant?.id && !unique.has(variant.id)) unique.set(variant.id,variant);
     });
     return [...unique.values()].filter((variant) => !variantView(family,variant).deleted);
@@ -359,12 +414,116 @@
   function orderedVariants(family) {
     const variants = familyVariants(family);
     const byId = new Map(variants.map((variant) => [variant.id,variant]));
-    const saved = Array.isArray(design.families[family.id]?.order) ? design.families[family.id].order : [];
+    const localOrder = spriteCardEdits.families?.[family.id]?.order;
+    const saved = Array.isArray(localOrder) && localOrder.length
+      ? localOrder
+      : (Array.isArray(design.families[family.id]?.order) ? design.families[family.id].order : []);
     const order = [
       ...saved.filter((id,index) => byId.has(id) && saved.indexOf(id) === index),
       ...variants.map((variant) => variant.id).filter((id) => !saved.includes(id))
     ];
     return order.map((id) => byId.get(id)).filter(Boolean);
+  }
+
+  function visibleVariants(family) {
+    return orderedVariants(family).filter((variant) => {
+      const view = variantView(family,variant);
+      return !view.deleted && view.visible;
+    });
+  }
+
+  function saveCardEditOrRestore(previousEdits) {
+    if (saveSpriteCardEdits()) return true;
+    spriteCardEdits = previousEdits;
+    return false;
+  }
+
+  function uniqueVariantId(family,name) {
+    const base = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'new-sprite';
+    const reserved = new Set([
+      ...(Array.isArray(family.variants) ? family.variants : []),
+      ...(Array.isArray(design.families[family.id]?.addedVariants) ? design.families[family.id].addedVariants : []),
+      ...(Array.isArray(spriteCardEdits.families?.[family.id]?.added) ? spriteCardEdits.families[family.id].added : [])
+    ].map((variant) => variant?.id).filter(Boolean));
+    let id = base;
+    let suffix = 2;
+    while (reserved.has(id)) id = `${base}-${suffix++}`;
+    return id;
+  }
+
+  function openAddSpriteDialog(familyId) {
+    const family = allFamilies().find((item) => item.id === familyId);
+    if (!family) return;
+    addSpriteFamilyId.value = familyId;
+    newSpriteName.value = '';
+    document.getElementById('addSpriteDialogTitle').textContent = `Add sprite to ${familyView(family).name || 'this row'}`;
+    addSpriteDialog.showModal();
+    setTimeout(() => newSpriteName.focus(),0);
+  }
+
+  function addSpriteCard(family,name) {
+    const previousEdits = cloneJson(spriteCardEdits);
+    const edits = familyCardEdits(family.id);
+    const id = uniqueVariantId(family,name);
+    const currentOrder = orderedVariants(family).map((variant) => variant.id);
+    edits.added.push({ id, name, image:'' });
+    edits.order = [...currentOrder,id];
+    if (!saveCardEditOrRestore(previousEdits)) return null;
+    return id;
+  }
+
+  function deleteSpriteCard(family,variant) {
+    const view = variantView(family,variant);
+    if (!window.confirm(`Delete the ${view.name || 'selected'} sprite card from ${familyView(family).name || 'this row'}?`)) return;
+    const previousEdits = cloneJson(spriteCardEdits);
+    const edits = familyCardEdits(family.id);
+    const addedIndex = edits.added.findIndex((item) => item.id === variant.id);
+    const isPublishedVariant = (Array.isArray(family.variants) && family.variants.some((item) => item.id === variant.id))
+      || (Array.isArray(design.families[family.id]?.addedVariants) && design.families[family.id].addedVariants.some((item) => item.id === variant.id))
+      || edits.publishedAdded.includes(variant.id);
+    if (addedIndex >= 0) edits.added.splice(addedIndex,1);
+    if (isPublishedVariant && !edits.deleted.includes(variant.id)) edits.deleted.push(variant.id);
+    edits.order = orderedVariants(family).map((item) => item.id).filter((id) => id !== variant.id);
+    delete edits.images[variant.id];
+    if (!saveCardEditOrRestore(previousEdits)) return;
+    if (state[family.id]) delete state[family.id][variant.id];
+    saveProgress();
+    renderTabs();
+    renderCollections();
+    updateCounters();
+    showToast('Sprite card deleted');
+  }
+
+  function saveVariantOrder(family,order,message = 'Sprite cards moved') {
+    const previousEdits = cloneJson(spriteCardEdits);
+    familyCardEdits(family.id).order = order;
+    if (!saveCardEditOrRestore(previousEdits)) return false;
+    renderCollections();
+    updateCounters();
+    showToast(message);
+    return true;
+  }
+
+  function moveSpriteCard(family,variantId,offset) {
+    const visible = visibleVariants(family);
+    const from = visible.findIndex((variant) => variant.id === variantId);
+    const target = from + offset;
+    if (from < 0 || target < 0 || target >= visible.length) return;
+    const order = orderedVariants(family).map((variant) => variant.id);
+    const fromIndex = order.indexOf(variantId);
+    const targetIndex = order.indexOf(visible[target].id);
+    [order[fromIndex],order[targetIndex]] = [order[targetIndex],order[fromIndex]];
+    saveVariantOrder(family,order);
+  }
+
+  function reorderSpriteCard(family,sourceId,targetId,placeAfter) {
+    const order = orderedVariants(family).map((variant) => variant.id);
+    const from = order.indexOf(sourceId);
+    if (from < 0 || sourceId === targetId || !order.includes(targetId)) return;
+    order.splice(from,1);
+    const target = order.indexOf(targetId);
+    order.splice(target + (placeAfter ? 1 : 0),0,sourceId);
+    saveVariantOrder(family,order);
   }
 
   function variantState(familyId,variantId) {
@@ -393,6 +552,314 @@
     const version = Number(design._meta?.publishedAt || 0);
     if (!value || !version || !/^(?:\.\/)?published-assets\//.test(value)) return value;
     return `${value}${value.includes('?') ? '&' : '?'}v=${version}`;
+  }
+
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve,reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function isImageFile(file) {
+    return Boolean(file && (file.type?.startsWith('image/') || /\.(png|jpe?g|webp|gif|avif|bmp)$/i.test(file.name || '')));
+  }
+
+  function droppedImageFile(dataTransfer) {
+    if (!dataTransfer) return null;
+    return [...dataTransfer.files].find(isImageFile)
+      || [...dataTransfer.items].map((item) => item.kind === 'file' ? item.getAsFile() : null).find(isImageFile)
+      || null;
+  }
+
+  function hasDroppedImage(dataTransfer) {
+    if (!dataTransfer) return false;
+    return [...dataTransfer.files].some(isImageFile)
+      || [...dataTransfer.items].some((item) => item.kind === 'file' && (!item.type || item.type.startsWith('image/')))
+      || [...dataTransfer.types].includes('Files');
+  }
+
+  async function resizeSpriteImage(file) {
+    const url = URL.createObjectURL(file);
+    try {
+      const image = new Image();
+      await new Promise((resolve,reject) => {
+        image.onload = resolve;
+        image.onerror = reject;
+        image.src = url;
+      });
+      if (!image.naturalWidth || !image.naturalHeight) throw new Error('invalid-image');
+      const maxWidth = 768;
+      const maxHeight = 768;
+      const targetBytes = 180000;
+      const sourceType = String(file.type || '').toLowerCase();
+      if (['image/png','image/jpeg','image/webp','image/avif'].includes(sourceType)
+        && image.naturalWidth <= maxWidth
+        && image.naturalHeight <= maxHeight
+        && file.size <= targetBytes) return readFileAsDataUrl(file);
+
+      let scale = Math.min(1,maxWidth / image.naturalWidth,maxHeight / image.naturalHeight);
+      let quality = .9;
+      let bestResult = '';
+      let bestBytes = Infinity;
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('canvas-unavailable');
+      for (let attempt = 0; attempt < 18; attempt += 1) {
+        canvas.width = Math.max(1,Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1,Math.round(image.naturalHeight * scale));
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = 'high';
+        context.clearRect(0,0,canvas.width,canvas.height);
+        context.drawImage(image,0,0,canvas.width,canvas.height);
+        const result = canvas.toDataURL('image/webp',quality);
+        const encodedLength = Math.max(0,result.length - result.indexOf(',') - 1);
+        const estimatedBytes = Math.ceil(encodedLength * .75);
+        if (estimatedBytes < bestBytes) {
+          bestResult = result;
+          bestBytes = estimatedBytes;
+        }
+        if (estimatedBytes <= targetBytes) return result;
+        if (quality > .72) quality = Math.max(.72,quality - .05);
+        else {
+          const shrink = Math.max(.7,Math.min(.9,Math.sqrt(targetBytes / estimatedBytes) * .96));
+          scale *= shrink;
+          quality = .9;
+        }
+      }
+      if (!bestResult) throw new Error('image-conversion-failed');
+      return bestResult;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  async function replaceSpriteImage(family,variant,file) {
+    if (!isImageFile(file)) throw new Error('not-an-image');
+    showToast('Preparing sprite image…');
+    const image = await resizeSpriteImage(file);
+    const previousEdits = cloneJson(spriteCardEdits);
+    familyCardEdits(family.id).images[variant.id] = image;
+    if (!saveCardEditOrRestore(previousEdits)) return false;
+    renderCollections();
+    updateCounters();
+    showToast('Sprite image saved');
+    return true;
+  }
+
+  function spriteCardEditsFingerprint() {
+    return JSON.stringify(spriteCardEdits.families || {});
+  }
+
+  function hasUnpublishedSpriteChanges() {
+    const families = spriteCardEdits.families || {};
+    const hasChanges = Object.values(families).some((edits) => edits && typeof edits === 'object' && (
+      (Array.isArray(edits.added) && edits.added.length)
+      || (Array.isArray(edits.deleted) && edits.deleted.length)
+      || (Array.isArray(edits.order) && edits.order.length)
+      || (edits.images && typeof edits.images === 'object' && Object.keys(edits.images).length)
+    ));
+    return Boolean(hasChanges && spriteCardEdits.lastPublishedSnapshot !== spriteCardEditsFingerprint());
+  }
+
+  function updatePublishButton() {
+    if (!publishSpritesBtn) return;
+    const pending = hasUnpublishedSpriteChanges();
+    publishSpritesBtn.disabled = !pending;
+    publishSpritesBtn.textContent = pending ? 'Publish sprite changes' : 'No changes to publish';
+  }
+
+  function setPublishStatus(message,state = '') {
+    publishSpritesStatus.textContent = message;
+    publishSpritesStatus.dataset.state = state;
+  }
+
+  function setPublishBusy(busy) {
+    const submit = document.getElementById('confirmPublishSpritesBtn');
+    const cancel = document.getElementById('cancelPublishSpritesBtn');
+    githubTokenInput.disabled = busy;
+    submit.disabled = busy;
+    cancel.disabled = busy;
+    submit.textContent = busy ? 'Publishing…' : 'Publish changes';
+  }
+
+  async function githubRequest(token,path,options = {}) {
+    const response = await fetch(`https://api.github.com${path}`,{
+      method:options.method || 'GET',
+      headers:{
+        Accept:'application/vnd.github+json',
+        Authorization:`Bearer ${token}`,
+        'X-GitHub-Api-Version':GITHUB_API_VERSION,
+        ...(options.body ? { 'Content-Type':'application/json' } : {})
+      },
+      body:options.body ? JSON.stringify(options.body) : undefined,
+      cache:'no-store'
+    });
+    const text = await response.text();
+    let result = null;
+    try { result = text ? JSON.parse(text) : null; } catch { result = null; }
+    if (!response.ok) {
+      const error = new Error(result?.message || `GitHub returned ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
+    return result;
+  }
+
+  function decodeBase64Utf8(value) {
+    const binary = atob(String(value || '').replace(/\s/g,''));
+    const bytes = Uint8Array.from(binary,(character) => character.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
+  }
+
+  function parsePublishedDesignFile(source) {
+    const text = String(source || '').replace(/^\uFEFF/,'');
+    const equals = text.indexOf('=');
+    const semicolon = text.lastIndexOf(';');
+    if (!/window\.PUBLISHED_DESIGN\s*=/.test(text) || equals < 0 || semicolon <= equals) throw new Error('The published design file could not be read.');
+    const parsed = JSON.parse(text.slice(equals + 1,semicolon).trim());
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('The published design file is invalid.');
+    return parsed;
+  }
+
+  function cleanAssetPart(value,fallback) {
+    return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || fallback;
+  }
+
+  function publishedImageAsset(familyId,variantId,dataUrl) {
+    const match = String(dataUrl || '').match(/^data:(image\/(?:png|jpe?g|webp|avif|gif));base64,([a-z0-9+/=\s]+)$/i);
+    if (!match) throw new Error('One sprite image could not be prepared for publishing.');
+    const mime = match[1].toLowerCase();
+    const extension = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg' : mime.split('/')[1];
+    return {
+      path:`published-assets/sprite-${cleanAssetPart(familyId,'group')}-${cleanAssetPart(variantId,'sprite')}.${extension}`,
+      content:match[2].replace(/\s/g,'')
+    };
+  }
+
+  function buildPublishedSpriteDesign(basePublishedDesign) {
+    const nextDesign = cloneJson(basePublishedDesign);
+    nextDesign.families ||= {};
+    const assets = [];
+    Object.entries(spriteCardEdits.families || {}).forEach(([familyId,rawEdits]) => {
+      if (!rawEdits || typeof rawEdits !== 'object' || Array.isArray(rawEdits)) return;
+      const edits = rawEdits;
+      const family = nextDesign.families[familyId] ||= {};
+      family.variants ||= {};
+      family.addedVariants = Array.isArray(family.addedVariants) ? family.addedVariants : [];
+
+      (Array.isArray(edits.added) ? edits.added : []).forEach((variant) => {
+        if (!variant?.id) return;
+        const existing = family.addedVariants.find((item) => item.id === variant.id);
+        if (existing) {
+          existing.name = variant.name || existing.name;
+        } else {
+          family.addedVariants.push({ id:variant.id, name:variant.name || 'New sprite', image:'' });
+        }
+        family.variants[variant.id] ||= {};
+        family.variants[variant.id].deleted = false;
+      });
+
+      (Array.isArray(edits.deleted) ? edits.deleted : []).forEach((variantId) => {
+        const addedIndex = family.addedVariants.findIndex((item) => item.id === variantId);
+        if (addedIndex >= 0) {
+          family.addedVariants.splice(addedIndex,1);
+          delete family.variants[variantId];
+        } else {
+          family.variants[variantId] ||= {};
+          family.variants[variantId].deleted = true;
+        }
+      });
+
+      if (Array.isArray(edits.order) && edits.order.length) {
+        const deleted = new Set(Array.isArray(edits.deleted) ? edits.deleted : []);
+        family.order = edits.order.filter((id,index,array) => id && !deleted.has(id) && array.indexOf(id) === index);
+      }
+
+      Object.entries(edits.images && typeof edits.images === 'object' ? edits.images : {}).forEach(([variantId,dataUrl]) => {
+        if (Array.isArray(edits.deleted) && edits.deleted.includes(variantId)) return;
+        const asset = publishedImageAsset(familyId,variantId,dataUrl);
+        assets.push(asset);
+        family.variants[variantId] ||= {};
+        family.variants[variantId].image = asset.path;
+        family.variants[variantId].deleted = false;
+      });
+    });
+    nextDesign._meta = { ...(nextDesign._meta || {}), publishedAt:Date.now() };
+    return { nextDesign, assets };
+  }
+
+  function githubPublishError(error) {
+    if (error?.status === 401) return 'GitHub did not accept that token. Check it and try again.';
+    if (error?.status === 403) return 'That token cannot write to this repository. Give it Contents: Read and write permission.';
+    if (error?.status === 404) return 'The repository or branch was not available to that token. Make sure Sprite-Checklist-Clean is selected.';
+    if (error?.status === 409 || error?.status === 422) return 'The repository changed while publishing. Wait a moment, then try again.';
+    return error?.message || 'The sprite changes could not be published.';
+  }
+
+  async function publishSpriteChanges(token) {
+    if (!hasUnpublishedSpriteChanges()) throw new Error('There are no new sprite changes to publish.');
+    const { owner,repo,branch } = GITHUB_PUBLISH_TARGET;
+    const repository = `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+    const reference = await githubRequest(token,`${repository}/git/ref/heads/${encodeURIComponent(branch)}`);
+    const headSha = reference?.object?.sha;
+    if (!headSha) throw new Error('GitHub did not return the current branch.');
+    const headCommit = await githubRequest(token,`${repository}/git/commits/${headSha}`);
+    const baseTreeSha = headCommit?.tree?.sha;
+    if (!baseTreeSha) throw new Error('GitHub did not return the current file tree.');
+    const publishedFile = await githubRequest(token,`${repository}/contents/published-design.js?ref=${encodeURIComponent(branch)}`);
+    const basePublishedDesign = parsePublishedDesignFile(decodeBase64Utf8(publishedFile?.content));
+    const { nextDesign,assets } = buildPublishedSpriteDesign(basePublishedDesign);
+    const treeEntries = [];
+
+    for (const asset of assets) {
+      const blob = await githubRequest(token,`${repository}/git/blobs`,{
+        method:'POST',
+        body:{ content:asset.content, encoding:'base64' }
+      });
+      treeEntries.push({ path:asset.path, mode:'100644', type:'blob', sha:blob.sha });
+    }
+
+    const publishedSource = `// Generated by Sprite Checklist. Artwork is stored in published-assets.\nwindow.PUBLISHED_DESIGN = ${JSON.stringify(nextDesign)};\n`;
+    const designBlob = await githubRequest(token,`${repository}/git/blobs`,{
+      method:'POST',
+      body:{ content:publishedSource, encoding:'utf-8' }
+    });
+    treeEntries.push({ path:'published-design.js', mode:'100644', type:'blob', sha:designBlob.sha });
+    const tree = await githubRequest(token,`${repository}/git/trees`,{
+      method:'POST',
+      body:{ base_tree:baseTreeSha, tree:treeEntries }
+    });
+    const commit = await githubRequest(token,`${repository}/git/commits`,{
+      method:'POST',
+      body:{ message:'Publish sprite card changes', tree:tree.sha, parents:[headSha] }
+    });
+    await githubRequest(token,`${repository}/git/refs/heads/${encodeURIComponent(branch)}`,{
+      method:'PATCH',
+      body:{ sha:commit.sha, force:false }
+    });
+
+    design.families = cloneJson(nextDesign.families || {});
+    design._meta = { ...(design._meta || {}), ...(nextDesign._meta || {}) };
+    Object.entries(nextDesign.families || {}).forEach(([familyId,family]) => {
+      if (!spriteCardEdits.families?.[familyId]) return;
+      familyCardEdits(familyId).publishedAdded = (Array.isArray(family.addedVariants) ? family.addedVariants : []).map((variant) => variant.id);
+    });
+    spriteCardEdits.lastPublishedSnapshot = spriteCardEditsFingerprint();
+    saveSpriteCardEdits();
+    renderAll();
+    return commit.sha;
+  }
+
+  function openPublishSpritesDialog() {
+    if (!hasUnpublishedSpriteChanges()) return showToast('There are no new sprite changes to publish.');
+    try { githubTokenInput.value = sessionStorage.getItem(GITHUB_TOKEN_SESSION_KEY) || ''; } catch { githubTokenInput.value = ''; }
+    setPublishBusy(false);
+    setPublishStatus(`Ready to publish to ${GITHUB_PUBLISH_TARGET.owner}/${GITHUB_PUBLISH_TARGET.repo}.`);
+    publishSpritesDialog.showModal();
+    setTimeout(() => githubTokenInput.focus(),0);
   }
 
   function safeCssUrl(source) {
@@ -589,8 +1056,9 @@
     const imageButton = card.querySelector('.image-button');
     const collectButton = card.querySelector('.collect-button');
     const crownButton = card.querySelector('.crown-button');
-    imageButton.setAttribute('aria-label',collectedAction);
-    imageButton.setAttribute('aria-pressed',String(Boolean(current.collected)));
+    imageButton.setAttribute('aria-label',spriteEditMode ? `Upload image for ${variantName} ${groupName}` : collectedAction);
+    if (spriteEditMode) imageButton.removeAttribute('aria-pressed');
+    else imageButton.setAttribute('aria-pressed',String(Boolean(current.collected)));
     collectButton.setAttribute('aria-label',collectedAction);
     collectButton.setAttribute('aria-pressed',String(Boolean(current.collected)));
     crownButton.setAttribute('aria-label',masteredAction);
@@ -613,6 +1081,8 @@
     const current = variantState(family.id,variant.id);
     const view = variantView(family,variant);
     const familyInfo = familyView(family);
+    const rowVariants = visibleVariants(family);
+    const rowIndex = rowVariants.findIndex((item) => item.id === variant.id);
     const card = document.createElement('article');
     card.className = 'card';
     card.dataset.familyId = family.id;
@@ -659,7 +1129,44 @@
     badge.setAttribute('aria-hidden','true');
     badge.textContent = '✓';
     imageButton.appendChild(badge);
-    imageWrap.appendChild(imageButton);
+    const uploadHint = document.createElement('span');
+    uploadHint.className = 'sprite-image-edit-hint';
+    uploadHint.textContent = 'Drop image or tap to upload';
+    uploadHint.setAttribute('aria-hidden','true');
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = 'image/*';
+    fileInput.hidden = true;
+    imageWrap.append(imageButton,uploadHint,fileInput);
+
+    const editorTools = document.createElement('div');
+    editorTools.className = 'sprite-card-tools';
+    editorTools.setAttribute('aria-label',`Move or delete ${view.name || 'sprite'} card`);
+    const moveLeft = document.createElement('button');
+    moveLeft.type = 'button';
+    moveLeft.className = 'sprite-move-step';
+    moveLeft.textContent = '←';
+    moveLeft.disabled = rowIndex <= 0;
+    moveLeft.setAttribute('aria-label',`Move ${view.name || 'sprite'} left`);
+    const moveHandle = document.createElement('button');
+    moveHandle.type = 'button';
+    moveHandle.className = 'sprite-move-handle';
+    moveHandle.textContent = 'Drag';
+    moveHandle.draggable = true;
+    moveHandle.setAttribute('aria-label',`Drag ${view.name || 'sprite'} to move it`);
+    const moveRight = document.createElement('button');
+    moveRight.type = 'button';
+    moveRight.className = 'sprite-move-step';
+    moveRight.textContent = '→';
+    moveRight.disabled = rowIndex < 0 || rowIndex === rowVariants.length - 1;
+    moveRight.setAttribute('aria-label',`Move ${view.name || 'sprite'} right`);
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'sprite-delete-button';
+    deleteButton.textContent = '×';
+    deleteButton.title = 'Delete sprite card';
+    deleteButton.setAttribute('aria-label',`Delete ${view.name || 'sprite'} card`);
+    editorTools.append(moveLeft,moveHandle,moveRight,deleteButton);
 
     const title = document.createElement('h4');
     title.textContent = view.name || '';
@@ -677,19 +1184,101 @@
 
     const masterLabel = document.createElement('div');
     masterLabel.className = 'master-label';
-    card.append(crown,imageWrap,title,collect,masterLabel);
+    card.append(crown,imageWrap,editorTools,title,collect,masterLabel);
 
     const toggleCollected = () => {
       current.collected = !current.collected;
       if (!current.collected) current.mastered = false;
       commitCardChange(card,family,variant,current,current.collected ? 'Added to collection' : 'Removed from collection');
     };
-    imageButton.addEventListener('click',toggleCollected);
+    imageButton.addEventListener('click',() => {
+      if (spriteEditMode) return fileInput.click();
+      toggleCollected();
+    });
     collect.addEventListener('click',toggleCollected);
     crown.addEventListener('click',() => {
       current.mastered = !current.mastered;
       if (current.mastered) current.collected = true;
       commitCardChange(card,family,variant,current,current.mastered ? 'Mastered' : 'Mastery removed');
+    });
+    moveLeft.addEventListener('click',() => moveSpriteCard(family,variant.id,-1));
+    moveRight.addEventListener('click',() => moveSpriteCard(family,variant.id,1));
+    deleteButton.addEventListener('click',() => deleteSpriteCard(family,variant));
+
+    const acceptImage = async (file) => {
+      imageWrap.classList.add('drop-saving');
+      uploadHint.textContent = 'Saving image…';
+      try {
+        await replaceSpriteImage(family,variant,file);
+      } catch {
+        showToast('Choose a PNG, JPG, WebP, GIF, or AVIF image.');
+      } finally {
+        imageWrap.classList.remove('drop-saving','drop-ready');
+        uploadHint.textContent = 'Drop image or tap to upload';
+        fileInput.value = '';
+      }
+    };
+    fileInput.addEventListener('change',() => {
+      if (fileInput.files?.[0]) acceptImage(fileInput.files[0]);
+    });
+    imageWrap.addEventListener('dragenter',(event) => {
+      if (!spriteEditMode || !hasDroppedImage(event.dataTransfer)) return;
+      event.preventDefault();
+      imageWrap.classList.add('drop-ready');
+    });
+    imageWrap.addEventListener('dragover',(event) => {
+      if (!spriteEditMode || !hasDroppedImage(event.dataTransfer)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'copy';
+      imageWrap.classList.add('drop-ready');
+    });
+    imageWrap.addEventListener('dragleave',(event) => {
+      if (!imageWrap.contains(event.relatedTarget)) imageWrap.classList.remove('drop-ready');
+    });
+    imageWrap.addEventListener('drop',(event) => {
+      if (!spriteEditMode || !hasDroppedImage(event.dataTransfer)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const file = droppedImageFile(event.dataTransfer);
+      if (file) acceptImage(file);
+      else showToast('Drop an image file onto the sprite card.');
+    });
+
+    moveHandle.addEventListener('dragstart',(event) => {
+      if (!spriteEditMode) return event.preventDefault();
+      const payload = JSON.stringify({ familyId:family.id, variantId:variant.id });
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData(CARD_REORDER_MIME,payload);
+      event.dataTransfer.setData('text/plain',payload);
+      card.classList.add('is-reordering');
+    });
+    moveHandle.addEventListener('dragend',() => {
+      document.querySelectorAll('.card').forEach((item) => item.classList.remove('is-reordering','reorder-before','reorder-after'));
+    });
+    card.addEventListener('dragover',(event) => {
+      if (!spriteEditMode || ![...event.dataTransfer.types].includes(CARD_REORDER_MIME)) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      const placeAfter = event.clientX > card.getBoundingClientRect().left + card.offsetWidth / 2;
+      card.classList.toggle('reorder-before',!placeAfter);
+      card.classList.toggle('reorder-after',placeAfter);
+    });
+    card.addEventListener('dragleave',(event) => {
+      if (!card.contains(event.relatedTarget)) card.classList.remove('reorder-before','reorder-after');
+    });
+    card.addEventListener('drop',(event) => {
+      if (!spriteEditMode || ![...event.dataTransfer.types].includes(CARD_REORDER_MIME)) return;
+      event.preventDefault();
+      card.classList.remove('reorder-before','reorder-after');
+      try {
+        const payload = event.dataTransfer.getData(CARD_REORDER_MIME) || event.dataTransfer.getData('text/plain');
+        const source = JSON.parse(payload);
+        if (source.familyId !== family.id) return showToast('Sprite cards stay in their current row.');
+        const placeAfter = event.clientX > card.getBoundingClientRect().left + card.offsetWidth / 2;
+        reorderSpriteCard(family,source.variantId,variant.id,placeAfter);
+      } catch {
+        showToast('That sprite card could not be moved.');
+      }
     });
     updateCard(card,current,family,variant);
     return card;
@@ -774,11 +1363,8 @@
     allFamilies().filter((family) => familyRarity(family) === activeRarity).forEach((family) => {
       const group = familyView(family);
       if (group.deleted || !group.visible) return;
-      const visibleVariants = orderedVariants(family).filter((variant) => {
-        const view = variantView(family,variant);
-        return !view.deleted && view.visible;
-      });
-      if (!visibleVariants.length) return;
+      const rowVariants = visibleVariants(family);
+      if (!rowVariants.length && !spriteEditMode) return;
       const stats = familyStats(family);
       const section = document.createElement('section');
       section.className = 'collection';
@@ -797,6 +1383,8 @@
       const meta = document.createElement('div');
       const count = document.createElement('span');
       const hint = document.createElement('span');
+      const headerActions = document.createElement('div');
+      const addButton = document.createElement('button');
       meta.className = 'collection-meta';
       count.className = 'collection-count';
       count.textContent = `${stats.collected} / ${stats.total} collected`;
@@ -804,17 +1392,29 @@
       hint.setAttribute('aria-hidden','true');
       hint.textContent = 'Swipe variants →';
       meta.append(count,hint);
-      header.append(title,meta);
+      headerActions.className = 'collection-head-actions';
+      addButton.type = 'button';
+      addButton.className = 'add-sprite-button';
+      addButton.textContent = '+ Add sprite';
+      addButton.addEventListener('click',() => openAddSpriteDialog(family.id));
+      headerActions.append(meta,addButton);
+      header.append(title,headerActions);
 
       const row = document.createElement('div');
       row.className = 'variant-row';
       row.setAttribute('aria-label',`${group.name || 'Sprite'} variants`);
-      visibleVariants.forEach((variant) => {
+      rowVariants.forEach((variant) => {
         const image = variantView(family,variant).image;
         const eager = Boolean(image && eagerImagesRemaining > 0);
         if (eager) eagerImagesRemaining -= 1;
         row.appendChild(makeCard(family,variant,{ eager }));
       });
+      if (!rowVariants.length) {
+        const empty = document.createElement('p');
+        empty.className = 'empty-sprite-row';
+        empty.textContent = 'No sprite cards in this row.';
+        row.appendChild(empty);
+      }
       section.append(header,row);
       collectionsEl.appendChild(section);
     });
@@ -849,6 +1449,7 @@
     renderTabs();
     renderCollections();
     updateCounters();
+    updatePublishButton();
   }
 
   function switchRarity(rarity,options = {}) {
@@ -989,6 +1590,16 @@
     showToast('Checklist progress reset');
   }
 
+  function setSpriteEditMode(enabled) {
+    spriteEditMode = Boolean(enabled);
+    document.body.classList.toggle('sprite-edit-mode',spriteEditMode);
+    spriteEditorToggle.setAttribute('aria-pressed',String(spriteEditMode));
+    spriteEditorToggle.textContent = spriteEditMode ? 'Done editing' : 'Edit sprites';
+    renderCollections();
+    updateCounters();
+    showToast(spriteEditMode ? 'Sprite editing on' : 'Sprite editing off');
+  }
+
   spriteSearchInput.addEventListener('input',renderSpriteSearchResults);
   spriteSearchInput.addEventListener('focus',() => {
     if (spriteSearchInput.value.trim()) renderSpriteSearchResults();
@@ -1037,6 +1648,53 @@
   document.addEventListener('pointerdown',(event) => {
     if (!event.target.closest('.sprite-search')) closeSpriteSearchResults();
   });
+  spriteEditorToggle.addEventListener('click',() => setSpriteEditMode(!spriteEditMode));
+  publishSpritesBtn.addEventListener('click',openPublishSpritesDialog);
+  publishSpritesForm.addEventListener('submit',async (event) => {
+    event.preventDefault();
+    const token = githubTokenInput.value.trim();
+    if (!token) return setPublishStatus('Paste a GitHub token first.','error');
+    try { sessionStorage.setItem(GITHUB_TOKEN_SESSION_KEY,token); } catch { /* The token can remain in the input for this tab. */ }
+    setPublishBusy(true);
+    setPublishStatus('Publishing sprite changes to GitHub…');
+    let published = false;
+    try {
+      const commitSha = await publishSpriteChanges(token);
+      const link = document.createElement('a');
+      link.href = `https://github.com/${GITHUB_PUBLISH_TARGET.owner}/${GITHUB_PUBLISH_TARGET.repo}/commit/${commitSha}`;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = 'View the GitHub commit';
+      publishSpritesStatus.replaceChildren(document.createTextNode('Published. The public site should update shortly. '),link);
+      publishSpritesStatus.dataset.state = 'success';
+      showToast('Sprite changes published');
+      published = true;
+    } catch (error) {
+      setPublishStatus(githubPublishError(error),'error');
+    } finally {
+      setPublishBusy(false);
+      if (published) {
+        const submit = document.getElementById('confirmPublishSpritesBtn');
+        submit.disabled = true;
+        submit.textContent = 'Published';
+      }
+    }
+  });
+  document.getElementById('cancelPublishSpritesBtn').addEventListener('click',() => publishSpritesDialog.close());
+  addSpriteForm.addEventListener('submit',(event) => {
+    event.preventDefault();
+    const family = allFamilies().find((item) => item.id === addSpriteFamilyId.value);
+    const name = newSpriteName.value.trim();
+    if (!family || !name) return;
+    const id = addSpriteCard(family,name);
+    if (!id) return;
+    addSpriteDialog.close();
+    renderTabs();
+    renderCollections();
+    updateCounters();
+    showToast(`${name} sprite card added — tap its image area to upload artwork`);
+  });
+  document.getElementById('cancelAddSpriteBtn').addEventListener('click',() => addSpriteDialog.close());
   window.addEventListener('hashchange',() => switchRarity(rarityFromHash() || defaultRarity));
   document.getElementById('resetBtn').addEventListener('click',() => resetDialog.showModal());
   document.getElementById('confirmResetBtn').addEventListener('click',resetProgress);
@@ -1045,6 +1703,6 @@
   const activeHash = `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js?v=46',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js?v=62',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
   }
 })();

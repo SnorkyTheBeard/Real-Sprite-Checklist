@@ -1,18 +1,24 @@
-const CACHE = 'galaxy-sprite-checklist-v66';
+const CACHE = 'galaxy-sprite-checklist-v67';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=66',
+  './styles.css?v=67',
   './published-design.js',
-  './art-config.js?v=66',
-  './data.js?v=66',
-  './app.js?v=66',
-  './manifest.webmanifest?v=66',
+  './art-config.js?v=67',
+  './data.js?v=67',
+  './app.js?v=67',
+  './manifest.webmanifest?v=67',
   './fonts/comic-neue-regular.woff2',
   './fonts/comic-neue-bold.woff2',
-  './Icons/icon-180.png?v=2',
-  './Icons/icon-192.png?v=2',
-  './Icons/icon-512.png?v=2',
+  './apple-touch-icon.png?v=67',
+  './favicon.ico?v=67',
+  './icons/app-icon-180-v67.png',
+  './icons/app-icon-192-v67.png',
+  './icons/app-icon-512-v67.png',
+  './icons/app-icon-maskable-192-v67.png',
+  './icons/app-icon-maskable-512-v67.png',
+  './icons/favicon-16-v67.png',
+  './icons/favicon-32-v67.png',
   './assets/variant-backgrounds/variant-well-base.webp',
   './assets/variant-backgrounds/variant-well-gold.webp',
   './assets/variant-backgrounds/variant-well-gummy.webp',
@@ -28,7 +34,7 @@ const CORE = [
   './assets/header/main-header.webp?v=3'
 ];
 const FRESH_CODE_FILES = new Set(['styles.css','art-config.js','data.js','app.js','manifest.webmanifest']);
-const FRESH_ASSET_PATHS = ['/assets/header/','/assets/page-backgrounds/'];
+const FRESH_ASSET_PATHS = ['/assets/header/','/assets/page-backgrounds/','/assets/social/','/icons/'];
 
 async function freshOrCached(networkRequest, cachedResponse) {
   try {

@@ -208,7 +208,7 @@ body.collection-open .collection:not(.has-custom-background) .collection-count,b
 .collect-button { width:100%; min-height:44px; display:flex; align-items:center; justify-content:center; gap:7px; color:var(--theme-button-text); border:1px solid rgba(90,63,125,.28); border-radius:13px; background:var(--theme-button-bg); font-size:var(--theme-checklist-button-size); font-weight:900; cursor:pointer; touch-action:pan-x pan-y pinch-zoom; }
 .box { width:20px; height:20px; flex:none; display:grid; place-items:center; border:2px solid var(--theme-accent); border-radius:6px; }
 .card.collected .box { background:var(--theme-accent); }
-.card.collected .box::after { content:"✓"; color:#10142b; font-size:14px; font-weight:1000; }
+.card.collected .box::after { content:"âœ“"; color:#10142b; font-size:14px; font-weight:1000; }
 .master-label { min-height:14px; margin-top:7px; color:#705c81; text-align:center; font-size:10px; }
 .card.mastered .master-label { color:#8d5d00; font-weight:900; }
 .card.search-target { outline:4px solid var(--theme-accent); outline-offset:3px; animation:search-target-pulse .75s ease-in-out 3 alternate; }
@@ -268,7 +268,7 @@ noscript { display:block; padding:12px; text-align:center; background:#7e2f42; }
   .card.search-target { animation:none; }
 }
 
-/* Minimal frosted-card and floating-title design — July 2026 */
+/* Minimal frosted-card and floating-title design â€” July 2026 */
 :root {
   --font-body: "UserCustomFont", "Trebuchet MS", sans-serif !important;
   --font-heading: "UserCustomFont", "Trebuchet MS", sans-serif !important;
@@ -507,4 +507,258 @@ h4,
 .page-eyebrow,
 .summary-box {
   font-family: "Fredoka", sans-serif !important;
+}
+
+/* Sprite-card editing: add, delete, upload artwork, and reorder only. */
+.page-head-actions {
+  display:flex;
+  flex:none;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:7px;
+}
+
+.sprite-editor-toggle,
+.add-sprite-button,
+.publish-sprites-button,
+.sprite-card-tools button {
+  color:#fff;
+  border:1px solid rgba(255,255,255,.3);
+  background:rgba(8,10,20,.72);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.15),0 5px 14px rgba(0,0,0,.24);
+  font-weight:700;
+  cursor:pointer;
+}
+
+.sprite-editor-toggle {
+  min-height:38px;
+  padding:7px 11px;
+  border-radius:999px;
+  font-size:12px;
+  white-space:nowrap;
+  -webkit-backdrop-filter:blur(12px);
+  backdrop-filter:blur(12px);
+}
+
+.sprite-editor-toggle[aria-pressed="true"] {
+  color:#09111a;
+  border-color:#9be8ff;
+  background:#9be8ff;
+}
+
+.collection-head-actions {
+  display:flex;
+  flex:none;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:7px;
+}
+
+.add-sprite-button {
+  display:none;
+  min-height:36px;
+  padding:7px 10px;
+  border-radius:11px;
+  font-size:11px;
+  white-space:nowrap;
+}
+
+body.sprite-edit-mode .add-sprite-button {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.publish-sprites-button {
+  display:none;
+  min-height:38px;
+  padding:7px 11px;
+  color:#07121b;
+  border-radius:999px;
+  border-color:#a9f7bf;
+  background:#a9f7bf;
+  font-size:11px;
+  white-space:nowrap;
+}
+
+body.sprite-edit-mode .publish-sprites-button {
+  display:block;
+}
+
+.publish-sprites-button:disabled {
+  color:#d8dbea;
+  border-color:rgba(255,255,255,.22);
+  background:rgba(8,10,20,.52);
+  opacity:.72;
+  cursor:not-allowed;
+}
+
+.sprite-card-tools {
+  display:none;
+  grid-template-columns:34px minmax(42px,1fr) 34px 34px;
+  gap:4px;
+  margin:8px 0 0;
+}
+
+body.sprite-edit-mode .sprite-card-tools {
+  display:grid;
+}
+
+.sprite-card-tools button {
+  min-width:0;
+  min-height:34px;
+  padding:4px;
+  border-radius:9px;
+  font-size:14px;
+  line-height:1;
+}
+
+.sprite-card-tools button:disabled {
+  opacity:.35;
+  cursor:not-allowed;
+}
+
+.sprite-card-tools .sprite-move-handle {
+  font-size:10px;
+  cursor:grab;
+}
+
+.sprite-card-tools .sprite-move-handle:active {
+  cursor:grabbing;
+}
+
+.sprite-card-tools .sprite-delete-button {
+  color:#fff;
+  border-color:rgba(255,137,151,.7);
+  background:rgba(121,24,43,.88);
+  font-size:20px;
+}
+
+.sprite-image-edit-hint {
+  display:none;
+  position:absolute;
+  inset:8px;
+  z-index:4;
+  place-items:center;
+  padding:10px;
+  color:#fff;
+  border:2px dashed rgba(255,255,255,.82);
+  border-radius:12px;
+  background:rgba(5,7,14,.62);
+  text-align:center;
+  font-size:11px;
+  font-weight:700;
+  line-height:1.25;
+  text-shadow:0 1px 3px #000;
+  pointer-events:none;
+}
+
+body.sprite-edit-mode .sprite-image-edit-hint {
+  display:grid;
+}
+
+body.sprite-edit-mode .image-button {
+  cursor:copy;
+}
+
+body.sprite-edit-mode .image-wrap.drop-ready .sprite-image-edit-hint {
+  color:#07121b;
+  border-style:solid;
+  border-color:#9be8ff;
+  background:rgba(155,232,255,.94);
+  text-shadow:none;
+}
+
+body.sprite-edit-mode .image-wrap.drop-saving .sprite-image-edit-hint {
+  border-style:solid;
+  background:rgba(5,7,14,.88);
+}
+
+.card.is-reordering {
+  opacity:.48;
+}
+
+.card.reorder-before {
+  border-left:5px solid #9be8ff !important;
+}
+
+.card.reorder-after {
+  border-right:5px solid #9be8ff !important;
+}
+
+.empty-sprite-row {
+  width:100%;
+  margin:0;
+  padding:22px 12px;
+  color:#e1e5f0;
+  border:1px dashed rgba(255,255,255,.35);
+  border-radius:14px;
+  text-align:center;
+  font-size:12px;
+}
+
+.add-sprite-dialog .add-sprite-label {
+  display:block;
+  margin:18px 0 6px;
+  font-weight:700;
+}
+
+.add-sprite-dialog input[type="text"],
+.publish-sprites-dialog input[type="password"] {
+  width:100%;
+  min-height:46px;
+  padding:10px 12px;
+  color:#fff;
+  border:1px solid rgba(255,255,255,.3);
+  border-radius:12px;
+  outline:none;
+  background:#0e1030;
+  font-size:16px;
+}
+
+.add-sprite-dialog .primary-btn {
+  color:#07121b;
+  border-color:#9be8ff;
+  background:#9be8ff;
+}
+
+.publish-sprites-dialog {
+  width:min(92vw,580px);
+}
+
+.publish-sprites-dialog .primary-btn {
+  color:#07121b;
+  border-color:#a9f7bf;
+  background:#a9f7bf;
+}
+
+.publish-token-help {
+  margin-top:9px !important;
+  font-size:12px;
+}
+
+.publish-token-help a,
+.publish-sprites-status a {
+  color:#9be8ff;
+}
+
+.publish-sprites-status {
+  min-height:20px;
+  margin-top:14px !important;
+  color:#dfe6f5 !important;
+  font-weight:700;
+}
+
+.publish-sprites-status[data-state="error"] {
+  color:#ffabb7 !important;
+}
+
+.publish-sprites-status[data-state="success"] {
+  color:#a9f7bf !important;
+}
+
+@media (max-width:480px) {
+  .page-head-actions { gap:5px; }
+  .sprite-editor-toggle { min-height:36px; padding:6px 9px; }
+  .collection-head { gap:7px; }
 }

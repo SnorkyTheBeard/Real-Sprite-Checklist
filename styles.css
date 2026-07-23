@@ -1126,3 +1126,13 @@ body.sprite-list-view .page-swipe-hint {
   min-width: max-content;
   white-space: nowrap;
 }
+.page-head-actions {
+  grid-template-columns: minmax(0, 1fr) auto auto max-content;
+  column-gap: 6px;
+}
+
+.page-count {
+  min-width: max-content;
+  margin-left: 6px;
+  white-space: nowrap;
+}

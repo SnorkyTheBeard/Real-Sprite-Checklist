@@ -1146,6 +1146,11 @@ body.unowned-page .sprite-editor-toggle {
   box-shadow:0 5px 16px rgba(0,0,0,.28);
 }
 
+#tab-unowned small {
+  color:#fff;
+  font-weight:900;
+}
+
 .unowned-empty {
   max-width:560px;
   margin:32px auto;

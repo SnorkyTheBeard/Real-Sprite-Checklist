@@ -1568,7 +1568,7 @@
       button.setAttribute('aria-selected',String(rarity === activeRarity));
       button.tabIndex = rarity === activeRarity ? 0 : -1;
       button.append(document.createTextNode(rarity),count);
-      count.textContent = rarity === UNOWNED_PAGE ? String(missing) : `${stats.collected}/${stats.total}`;
+      count.textContent = rarity === UNOWNED_PAGE ? `(${missing})` : `${stats.collected}/${stats.total}`;
       button.setAttribute(
         'aria-label',
         rarity === UNOWNED_PAGE
@@ -1690,7 +1690,7 @@
     });
     tabsEl.querySelectorAll('.tab').forEach((tab) => {
       if (tab.id === 'tab-unowned') {
-        tab.querySelector('small').textContent = String(missing);
+        tab.querySelector('small').textContent = `(${missing})`;
         tab.setAttribute('aria-label',`Unowned Sprites, ${missing} remaining`);
         return;
       }
@@ -1993,6 +1993,6 @@
   const activeHash = `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js?v=71',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js?v=72',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
   }
 })();

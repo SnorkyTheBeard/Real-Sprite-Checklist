@@ -17,7 +17,11 @@
   const PROGRESS_KEY = `galaxy_sprite_tracker_progress_v2_${STORAGE_SCOPE}`;
   const VIEW_MODES_KEY = `galaxy_sprite_tracker_view_modes_v1_${STORAGE_SCOPE}`;
   const SPRITE_CARD_EDITS_KEY = `galaxy_sprite_tracker_sprite_cards_v1_${STORAGE_SCOPE}`;
+  const PRE_RESTORE_PROGRESS_KEY = `galaxy_sprite_tracker_progress_before_restore_v1_${STORAGE_SCOPE}`;
   const LEGACY_PROGRESS_KEY = 'galaxy_sprite_tracker_progress_v1';
+  const BACKUP_FORMAT = 'my-sprite-tracker-backup';
+  const BACKUP_VERSION = 1;
+  const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
   const CARD_REORDER_MIME = 'application/x-sprite-card';
   const GITHUB_TOKEN_SESSION_KEY = `galaxy_sprite_tracker_github_token_${STORAGE_SCOPE}`;
   const GITHUB_API_VERSION = '2026-03-10';
@@ -311,6 +315,9 @@
   let spriteEditMode = false;
   let activeRarity = rarityFromHash() || defaultRarity;
   let toastTimer = 0;
+  let pendingRestore = null;
+  let showcaseObjectUrl = '';
+  let showcaseFile = null;
 
   const tabsEl = document.getElementById('rarityTabs');
   const collectionsEl = document.getElementById('collections');
@@ -345,6 +352,25 @@
   const publishSpritesForm = document.getElementById('publishSpritesForm');
   const githubTokenInput = document.getElementById('githubTokenInput');
   const publishSpritesStatus = document.getElementById('publishSpritesStatus');
+  const showcaseBtn = document.getElementById('showcaseBtn');
+  const showcaseDialog = document.getElementById('showcaseDialog');
+  const showcaseForm = document.getElementById('showcaseForm');
+  const showcaseStatusSelect = document.getElementById('showcaseStatus');
+  const showcaseRaritySelect = document.getElementById('showcaseRarity');
+  const showcaseSortSelect = document.getElementById('showcaseSort');
+  const showcaseMatchCount = document.getElementById('showcaseMatchCount');
+  const showcaseStatusMessage = document.getElementById('showcaseStatusMessage');
+  const showcasePreviewWrap = document.getElementById('showcasePreviewWrap');
+  const showcasePreview = document.getElementById('showcasePreview');
+  const generateShowcaseBtn = document.getElementById('generateShowcaseBtn');
+  const downloadShowcaseBtn = document.getElementById('downloadShowcaseBtn');
+  const shareShowcaseBtn = document.getElementById('shareShowcaseBtn');
+  const backupBtn = document.getElementById('backupBtn');
+  const backupDialog = document.getElementById('backupDialog');
+  const backupFileInput = document.getElementById('backupFileInput');
+  const backupRestoreStatus = document.getElementById('backupRestoreStatus');
+  const confirmRestoreBtn = document.getElementById('confirmRestoreBtn');
+  const undoRestoreBtn = document.getElementById('undoRestoreBtn');
 
   function saveProgress() {
     try {
@@ -1844,6 +1870,607 @@
     toastTimer = setTimeout(() => statusToast.classList.remove('show'),2400);
   }
 
+  function safeStorageGet(key) {
+    try { return localStorage.getItem(key); } catch { return null; }
+  }
+
+  function downloadableFile(blob,filename) {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.hidden = true;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url),1000);
+  }
+
+  function safeBackupKey(value) {
+    const key = String(value || '');
+    return Boolean(key && key.length <= 200 && !['__proto__','prototype','constructor'].includes(key));
+  }
+
+  function sanitizeProgress(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('This backup does not contain valid checklist progress.');
+    const clean = {};
+    let familyCount = 0;
+    let variantCount = 0;
+    Object.entries(value).forEach(([familyId,variants]) => {
+      if (!safeBackupKey(familyId) || !variants || typeof variants !== 'object' || Array.isArray(variants)) return;
+      familyCount += 1;
+      if (familyCount > 500) throw new Error('This backup contains too many Sprite groups.');
+      const cleanVariants = {};
+      Object.entries(variants).forEach(([variantId,current]) => {
+        if (!safeBackupKey(variantId) || !current || typeof current !== 'object' || Array.isArray(current)) return;
+        variantCount += 1;
+        if (variantCount > 5000) throw new Error('This backup contains too many Sprite cards.');
+        const mastered = current.mastered === true;
+        cleanVariants[variantId] = {
+          collected:current.collected === true || mastered,
+          mastered
+        };
+      });
+      clean[familyId] = cleanVariants;
+    });
+    return clean;
+  }
+
+  function sanitizeViewModes(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    return Object.fromEntries(pageTabs.flatMap((page) => (
+      value[page] === 'list' || value[page] === 'card' ? [[page,value[page]]] : []
+    )));
+  }
+
+  function progressSnapshotStats(progress) {
+    return Object.values(progress || {}).reduce((totals,variants) => {
+      if (!variants || typeof variants !== 'object') return totals;
+      Object.values(variants).forEach((current) => {
+        if (!current || typeof current !== 'object') return;
+        totals.saved += 1;
+        totals.collected += current.collected === true ? 1 : 0;
+        totals.mastered += current.mastered === true ? 1 : 0;
+      });
+      return totals;
+    },{ saved:0, collected:0, mastered:0 });
+  }
+
+  function backupPayload() {
+    return {
+      format:BACKUP_FORMAT,
+      version:BACKUP_VERSION,
+      exportedAt:new Date().toISOString(),
+      app:'My Sprite Tracker',
+      progress:sanitizeProgress(state),
+      viewModes:sanitizeViewModes(spriteViewModes)
+    };
+  }
+
+  function downloadProgressBackup() {
+    const payload = backupPayload();
+    const blob = new Blob([`${JSON.stringify(payload,null,2)}\n`],{ type:'application/json' });
+    const date = payload.exportedAt.slice(0,10);
+    downloadableFile(blob,`my-sprite-tracker-backup-${date}.json`);
+    const stats = progressSnapshotStats(payload.progress);
+    backupRestoreStatus.dataset.state = 'success';
+    backupRestoreStatus.textContent = `Backup downloaded: ${stats.collected} collected and ${stats.mastered} mastered.`;
+    showToast('Progress backup downloaded');
+  }
+
+  function readFileAsText(file) {
+    if (typeof file?.text === 'function') return file.text();
+    return new Promise((resolve,reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ''));
+      reader.onerror = reject;
+      reader.readAsText(file);
+    });
+  }
+
+  function parsedBackup(value) {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('That is not a Sprite Tracker backup.');
+    if (value.format !== BACKUP_FORMAT || value.version !== BACKUP_VERSION) {
+      throw new Error('That file is not a compatible Sprite Tracker backup.');
+    }
+    return {
+      progress:sanitizeProgress(value.progress),
+      viewModes:sanitizeViewModes(value.viewModes)
+    };
+  }
+
+  async function prepareBackupRestore(file) {
+    pendingRestore = null;
+    confirmRestoreBtn.disabled = true;
+    backupRestoreStatus.dataset.state = '';
+    if (!file) {
+      backupRestoreStatus.textContent = 'No backup selected.';
+      return;
+    }
+    if (file.size > MAX_BACKUP_BYTES) {
+      backupRestoreStatus.dataset.state = 'error';
+      backupRestoreStatus.textContent = 'That file is too large to be a checklist backup.';
+      backupFileInput.value = '';
+      return;
+    }
+    backupRestoreStatus.textContent = 'Checking backup…';
+    try {
+      const parsed = parsedBackup(JSON.parse(await readFileAsText(file)));
+      const stats = progressSnapshotStats(parsed.progress);
+      pendingRestore = parsed;
+      confirmRestoreBtn.disabled = false;
+      backupRestoreStatus.dataset.state = 'success';
+      backupRestoreStatus.textContent = `Ready to restore ${stats.collected} collected and ${stats.mastered} mastered choices.`;
+    } catch (error) {
+      backupRestoreStatus.dataset.state = 'error';
+      backupRestoreStatus.textContent = error instanceof SyntaxError ? 'That file is not valid JSON.' : error.message;
+      backupFileInput.value = '';
+    }
+  }
+
+  function updateUndoRestoreButton() {
+    undoRestoreBtn.hidden = !safeStorageGet(PRE_RESTORE_PROGRESS_KEY);
+  }
+
+  function openBackupDialog() {
+    pendingRestore = null;
+    backupFileInput.value = '';
+    confirmRestoreBtn.disabled = true;
+    backupRestoreStatus.dataset.state = '';
+    backupRestoreStatus.textContent = 'No backup selected.';
+    updateUndoRestoreButton();
+    backupDialog.showModal();
+  }
+
+  function restoreSelectedBackup() {
+    if (!pendingRestore) return;
+    const safetyCopy = {
+      progress:sanitizeProgress(state),
+      viewModes:sanitizeViewModes(spriteViewModes)
+    };
+    try {
+      localStorage.setItem(PRE_RESTORE_PROGRESS_KEY,JSON.stringify(safetyCopy));
+    } catch {
+      backupRestoreStatus.dataset.state = 'error';
+      backupRestoreStatus.textContent = 'This browser could not create the safety copy, so nothing was restored.';
+      return;
+    }
+    state = pendingRestore.progress;
+    spriteViewModes = pendingRestore.viewModes;
+    if (!saveProgress()) {
+      state = safetyCopy.progress;
+      return;
+    }
+    try { localStorage.setItem(VIEW_MODES_KEY,JSON.stringify(spriteViewModes)); } catch { /* Progress is still safely restored. */ }
+    pendingRestore = null;
+    backupDialog.close();
+    renderAll();
+    showToast('Progress restored from backup');
+  }
+
+  function undoLastRestore() {
+    const raw = safeStorageGet(PRE_RESTORE_PROGRESS_KEY);
+    if (!raw) return;
+    try {
+      const saved = JSON.parse(raw);
+      state = sanitizeProgress(saved.progress);
+      spriteViewModes = sanitizeViewModes(saved.viewModes);
+      if (!saveProgress()) throw new Error('Progress could not be saved.');
+      localStorage.setItem(VIEW_MODES_KEY,JSON.stringify(spriteViewModes));
+      localStorage.removeItem(PRE_RESTORE_PROGRESS_KEY);
+      backupDialog.close();
+      renderAll();
+      showToast('Last progress restore undone');
+    } catch {
+      backupRestoreStatus.dataset.state = 'error';
+      backupRestoreStatus.textContent = 'The undo copy could not be restored.';
+    }
+  }
+
+  function showcaseSelection() {
+    return {
+      status:showcaseStatusSelect.value,
+      rarity:showcaseRaritySelect.value,
+      sort:showcaseSortSelect.value
+    };
+  }
+
+  function showcaseStatusLabel(status) {
+    return {
+      collected:'All collected',
+      mastered:'Mastered',
+      'collected-not-mastered':'Collected, not mastered',
+      unowned:'Unowned'
+    }[status] || 'Collected';
+  }
+
+  function showcaseStatusMatches(current,status) {
+    const collected = current?.collected === true || current?.mastered === true;
+    const mastered = current?.mastered === true;
+    if (status === 'mastered') return mastered;
+    if (status === 'collected-not-mastered') return collected && !mastered;
+    if (status === 'unowned') return !collected;
+    return collected;
+  }
+
+  function percentageNumber(value) {
+    const number = Number.parseFloat(String(value || '').replace('%',''));
+    return Number.isFinite(number) ? number : Number.POSITIVE_INFINITY;
+  }
+
+  function showcaseEntries(selection = showcaseSelection()) {
+    const entries = [];
+    allFamilies().forEach((family) => {
+      const group = familyView(family);
+      const rarity = familyRarity(family);
+      if (group.deleted || !group.visible || !rarities.includes(rarity)) return;
+      if (selection.rarity !== 'all' && rarity !== selection.rarity) return;
+      visibleVariants(family).forEach((variant) => {
+        const current = state[family.id]?.[variant.id] || { collected:false, mastered:false };
+        if (!showcaseStatusMatches(current,selection.status)) return;
+        const view = variantView(family,variant);
+        entries.push({
+          familyId:family.id,
+          variantId:variant.id,
+          groupName:group.name || 'Unnamed Sprite',
+          variantName:view.name || 'Unnamed variant',
+          rarity,
+          rarityPercentage:view.rarityPercentage || '',
+          image:displayImageSource(view.image),
+          background:displayImageSource(variantBackgroundSource(variant)),
+          collected:current.collected === true || current.mastered === true,
+          mastered:current.mastered === true
+        });
+      });
+    });
+    if (selection.sort === 'name') {
+      entries.sort((a,b) => a.groupName.localeCompare(b.groupName) || a.variantName.localeCompare(b.variantName));
+    } else if (selection.sort === 'rarest') {
+      entries.sort((a,b) => percentageNumber(a.rarityPercentage) - percentageNumber(b.rarityPercentage)
+        || a.groupName.localeCompare(b.groupName)
+        || a.variantName.localeCompare(b.variantName));
+    }
+    return entries;
+  }
+
+  function updateShowcaseMatchCount() {
+    const entries = showcaseEntries();
+    showcaseMatchCount.textContent = `${entries.length} Sprite${entries.length === 1 ? '' : 's'} will be included.`;
+    generateShowcaseBtn.disabled = !entries.length;
+    return entries;
+  }
+
+  function clearShowcaseFile() {
+    if (showcaseObjectUrl) URL.revokeObjectURL(showcaseObjectUrl);
+    showcaseObjectUrl = '';
+    showcaseFile = null;
+    showcasePreview.removeAttribute('src');
+    showcasePreviewWrap.hidden = true;
+    downloadShowcaseBtn.hidden = true;
+    shareShowcaseBtn.hidden = true;
+  }
+
+  function openShowcaseDialog() {
+    clearShowcaseFile();
+    showcaseStatusSelect.value = isUnownedPage() ? 'unowned' : 'collected';
+    showcaseRaritySelect.value = rarities.includes(activeRarity) ? activeRarity : 'all';
+    showcaseSortSelect.value = 'app';
+    showcaseStatusMessage.textContent = '';
+    showcaseStatusMessage.dataset.state = '';
+    updateShowcaseMatchCount();
+    showcaseDialog.showModal();
+  }
+
+  function roundedPath(context,x,y,width,height,radius) {
+    const r = Math.max(0,Math.min(radius,width / 2,height / 2));
+    context.beginPath();
+    context.moveTo(x + r,y);
+    context.lineTo(x + width - r,y);
+    context.quadraticCurveTo(x + width,y,x + width,y + r);
+    context.lineTo(x + width,y + height - r);
+    context.quadraticCurveTo(x + width,y + height,x + width - r,y + height);
+    context.lineTo(x + r,y + height);
+    context.quadraticCurveTo(x,y + height,x,y + height - r);
+    context.lineTo(x,y + r);
+    context.quadraticCurveTo(x,y,x + r,y);
+    context.closePath();
+  }
+
+  function fillRounded(context,x,y,width,height,radius,fillStyle) {
+    roundedPath(context,x,y,width,height,radius);
+    context.fillStyle = fillStyle;
+    context.fill();
+  }
+
+  function drawImageCover(context,image,x,y,width,height) {
+    const scale = Math.max(width / image.naturalWidth,height / image.naturalHeight);
+    const sourceWidth = width / scale;
+    const sourceHeight = height / scale;
+    const sourceX = (image.naturalWidth - sourceWidth) / 2;
+    const sourceY = (image.naturalHeight - sourceHeight) / 2;
+    context.drawImage(image,sourceX,sourceY,sourceWidth,sourceHeight,x,y,width,height);
+  }
+
+  function drawImageContain(context,image,x,y,width,height,padding = 0) {
+    const availableWidth = Math.max(1,width - padding * 2);
+    const availableHeight = Math.max(1,height - padding * 2);
+    const scale = Math.min(availableWidth / image.naturalWidth,availableHeight / image.naturalHeight);
+    const drawWidth = image.naturalWidth * scale;
+    const drawHeight = image.naturalHeight * scale;
+    context.drawImage(image,x + (width - drawWidth) / 2,y + (height - drawHeight) / 2,drawWidth,drawHeight);
+  }
+
+  function fitCanvasText(context,text,maxWidth) {
+    const value = String(text || '');
+    if (context.measureText(value).width <= maxWidth) return value;
+    let shortened = value;
+    while (shortened.length > 1 && context.measureText(`${shortened}…`).width > maxWidth) shortened = shortened.slice(0,-1);
+    return `${shortened}…`;
+  }
+
+  function wrappedCanvasLines(context,text,maxWidth,maxLines = 2) {
+    const words = String(text || '').split(/\s+/).filter(Boolean);
+    const lines = [];
+    let line = '';
+    words.forEach((word) => {
+      const candidate = line ? `${line} ${word}` : word;
+      if (!line || context.measureText(candidate).width <= maxWidth) line = candidate;
+      else {
+        lines.push(line);
+        line = word;
+      }
+    });
+    if (line) lines.push(line);
+    if (lines.length <= maxLines) return lines;
+    const limited = lines.slice(0,maxLines);
+    limited[maxLines - 1] = fitCanvasText(context,`${limited[maxLines - 1]}…`,maxWidth);
+    return limited;
+  }
+
+  function canvasImage(source,cache) {
+    if (!source) return Promise.resolve(null);
+    const resolved = (() => {
+      try { return new URL(source,document.baseURI).href; } catch { return source; }
+    })();
+    if (cache.has(resolved)) return cache.get(resolved);
+    const promise = new Promise((resolve) => {
+      const image = new Image();
+      let settled = false;
+      const finish = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+      const timer = setTimeout(() => finish(null),12000);
+      image.onload = () => finish(image);
+      image.onerror = () => finish(null);
+      if (/^https?:/i.test(resolved)) image.crossOrigin = 'anonymous';
+      image.src = resolved;
+    });
+    cache.set(resolved,promise);
+    return promise;
+  }
+
+  function rarityColor(rarity) {
+    return {
+      Rare:'#3c9dff',
+      Epic:'#a96dff',
+      Legendary:'#ff993f',
+      Mythic:'#ffd45f'
+    }[rarity] || '#b8c0d9';
+  }
+
+  function drawShowcaseBackground(context,width,height) {
+    const gradient = context.createLinearGradient(0,0,width,height);
+    gradient.addColorStop(0,'#080c25');
+    gradient.addColorStop(.45,'#16255b');
+    gradient.addColorStop(1,'#25113d');
+    context.fillStyle = gradient;
+    context.fillRect(0,0,width,height);
+    context.fillStyle = 'rgba(255,255,255,.025)';
+    for (let y = 0; y < height; y += 72) context.fillRect(0,y,width,1);
+    for (let index = 0; index < Math.min(90,Math.ceil(height / 65)); index += 1) {
+      const x = (index * 173 + 91) % width;
+      const y = (index * 251 + 47) % height;
+      context.globalAlpha = .2 + (index % 4) * .08;
+      context.fillStyle = index % 3 ? '#9be8ff' : '#ffd45f';
+      context.beginPath();
+      context.arc(x,y,index % 4 === 0 ? 2.2 : 1.3,0,Math.PI * 2);
+      context.fill();
+    }
+    context.globalAlpha = 1;
+  }
+
+  async function drawShowcaseCard(context,entry,x,y,width,height,imageCache) {
+    const wellX = x + 12;
+    const wellY = y + 12;
+    const wellWidth = width - 24;
+    const wellHeight = 205;
+    fillRounded(context,x,y,width,height,20,'rgba(8,10,24,.82)');
+    context.strokeStyle = entry.mastered ? '#ffd45f' : 'rgba(255,255,255,.25)';
+    context.lineWidth = entry.mastered ? 3 : 1.5;
+    roundedPath(context,x,y,width,height,20);
+    context.stroke();
+
+    context.save();
+    roundedPath(context,wellX,wellY,wellWidth,wellHeight,14);
+    context.clip();
+    const wellGradient = context.createLinearGradient(wellX,wellY,wellX + wellWidth,wellY + wellHeight);
+    wellGradient.addColorStop(0,'#181b32');
+    wellGradient.addColorStop(1,'#080a13');
+    context.fillStyle = wellGradient;
+    context.fillRect(wellX,wellY,wellWidth,wellHeight);
+    const background = await canvasImage(entry.background,imageCache);
+    if (background) drawImageCover(context,background,wellX,wellY,wellWidth,wellHeight);
+    const sprite = await canvasImage(entry.image,imageCache);
+    if (sprite) drawImageContain(context,sprite,wellX,wellY,wellWidth,wellHeight,14);
+    else {
+      context.fillStyle = 'rgba(255,255,255,.65)';
+      context.font = '700 21px "UserCustomFont","Trebuchet MS",sans-serif';
+      context.textAlign = 'center';
+      context.fillText('Image unavailable',wellX + wellWidth / 2,wellY + wellHeight / 2);
+    }
+    context.restore();
+
+    context.textAlign = 'left';
+    context.fillStyle = '#fff';
+    context.font = '700 24px "UserCustomFont","Trebuchet MS",sans-serif';
+    context.fillText(fitCanvasText(context,entry.groupName,width - 28),x + 14,y + 246);
+    context.fillStyle = '#c9cee0';
+    context.font = '600 19px "UserCustomFont","Trebuchet MS",sans-serif';
+    context.fillText(fitCanvasText(context,entry.variantName,width - 28),x + 14,y + 274);
+
+    const color = rarityColor(entry.rarity);
+    fillRounded(context,x + 14,y + height - 43,entry.rarityPercentage ? 102 : 88,28,14,color);
+    context.fillStyle = entry.rarity === 'Mythic' ? '#241900' : '#fff';
+    context.font = '700 14px "UserCustomFont","Trebuchet MS",sans-serif';
+    context.textAlign = 'center';
+    context.fillText(entry.rarity,x + 14 + (entry.rarityPercentage ? 102 : 88) / 2,y + height - 23);
+    if (entry.rarityPercentage) {
+      context.fillStyle = '#fff';
+      context.font = '700 15px "UserCustomFont","Trebuchet MS",sans-serif';
+      context.textAlign = 'right';
+      context.fillText(entry.rarityPercentage,x + width - 14,y + height - 23);
+    }
+    if (entry.mastered) {
+      context.fillStyle = '#ffd45f';
+      context.font = '700 23px "UserCustomFont","Trebuchet MS",sans-serif';
+      context.textAlign = 'right';
+      context.fillText('★',x + width - 14,y + 37);
+    }
+  }
+
+  function canvasToBlob(canvas,type,quality) {
+    return new Promise((resolve,reject) => {
+      canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('The image could not be prepared.')),type,quality);
+    });
+  }
+
+  async function createShowcaseImage(entries,selection) {
+    if (entries.length > 240) throw new Error('Choose a narrower filter so the image contains 240 Sprites or fewer.');
+    if (document.fonts?.ready) {
+      try { await document.fonts.ready; } catch { /* Use the fallback font. */ }
+    }
+    const width = 1400;
+    const margin = 48;
+    const gap = 18;
+    const columns = 5;
+    const headerHeight = 248;
+    const cardWidth = (width - margin * 2 - gap * (columns - 1)) / columns;
+    const cardHeight = 330;
+    const rows = Math.ceil(entries.length / columns);
+    const footerHeight = 148;
+    const height = headerHeight + rows * cardHeight + Math.max(0,rows - 1) * gap + footerHeight;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('This browser could not open the image creator.');
+    drawShowcaseBackground(context,width,height);
+
+    const selectionLabel = `${showcaseStatusLabel(selection.status)} · ${selection.rarity === 'all' ? 'All rarities' : selection.rarity}`;
+    const overall = overallStats();
+    context.textAlign = 'left';
+    context.fillStyle = '#fff';
+    context.font = '700 70px "UserCustomFont","Trebuchet MS",sans-serif';
+    context.fillText('My Sprite Tracker',margin,91);
+    context.fillStyle = '#cbd7ff';
+    context.font = '600 30px "UserCustomFont","Trebuchet MS",sans-serif';
+    context.fillText(selectionLabel,margin,139);
+    context.fillStyle = '#fff';
+    context.font = '700 25px "UserCustomFont","Trebuchet MS",sans-serif';
+    context.fillText(`${entries.length} Sprite${entries.length === 1 ? '' : 's'} shown`,margin,190);
+    context.textAlign = 'right';
+    context.fillStyle = '#9be8ff';
+    context.fillText(`${overall.collected}/${overall.total} collected`,width - margin,91);
+    context.fillStyle = '#ffd45f';
+    context.fillText(`${overall.mastered}/${overall.total} mastered`,width - margin,129);
+
+    const imageCache = new Map();
+    for (let index = 0; index < entries.length; index += 1) {
+      const column = index % columns;
+      const row = Math.floor(index / columns);
+      const x = margin + column * (cardWidth + gap);
+      const y = headerHeight + row * (cardHeight + gap);
+      await drawShowcaseCard(context,entries[index],x,y,cardWidth,cardHeight,imageCache);
+      if ((index + 1) % 10 === 0) {
+        showcaseStatusMessage.textContent = `Drawing Sprite ${index + 1} of ${entries.length}…`;
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+      }
+    }
+
+    const footerY = height - footerHeight;
+    context.fillStyle = 'rgba(4,5,15,.52)';
+    context.fillRect(0,footerY,width,footerHeight);
+    context.textAlign = 'left';
+    context.fillStyle = '#fff';
+    context.font = '700 22px "UserCustomFont","Trebuchet MS",sans-serif';
+    context.fillText('snorkythebeard.github.io/Real-Sprite-Checklist/',margin,footerY + 45);
+    const disclaimer = document.querySelector('.fan-content-disclaimer')?.textContent?.trim() || '';
+    context.fillStyle = '#aeb5ca';
+    context.font = '500 16px "UserCustomFont","Trebuchet MS",sans-serif';
+    const lines = wrappedCanvasLines(context,disclaimer,width - margin * 2,3);
+    lines.forEach((line,index) => context.fillText(line,margin,footerY + 79 + index * 22));
+
+    return canvasToBlob(canvas,'image/jpeg',.92);
+  }
+
+  async function generateShowcaseImage(event) {
+    event.preventDefault();
+    const selection = showcaseSelection();
+    const entries = showcaseEntries(selection);
+    if (!entries.length) {
+      showcaseStatusMessage.dataset.state = 'error';
+      showcaseStatusMessage.textContent = 'No Sprites match those choices yet.';
+      return;
+    }
+    clearShowcaseFile();
+    generateShowcaseBtn.disabled = true;
+    showcaseStatusMessage.dataset.state = '';
+    showcaseStatusMessage.textContent = `Creating an image with ${entries.length} Sprites…`;
+    try {
+      const blob = await createShowcaseImage(entries,selection);
+      const statusSlug = selection.status.replace(/[^a-z0-9]+/g,'-');
+      const raritySlug = selection.rarity === 'all' ? 'all-rarities' : selection.rarity.toLowerCase();
+      const filename = `my-sprite-tracker-${statusSlug}-${raritySlug}.jpg`;
+      showcaseFile = new File([blob],filename,{ type:'image/jpeg' });
+      showcaseObjectUrl = URL.createObjectURL(showcaseFile);
+      showcasePreview.src = showcaseObjectUrl;
+      showcasePreviewWrap.hidden = false;
+      downloadShowcaseBtn.hidden = false;
+      let canShare = false;
+      try { canShare = Boolean(navigator.share && navigator.canShare?.({ files:[showcaseFile] })); } catch { canShare = false; }
+      shareShowcaseBtn.hidden = !canShare;
+      showcaseStatusMessage.dataset.state = 'success';
+      showcaseStatusMessage.textContent = 'Your collection image is ready.';
+    } catch (error) {
+      showcaseStatusMessage.dataset.state = 'error';
+      showcaseStatusMessage.textContent = error.message || 'The image could not be created.';
+    } finally {
+      generateShowcaseBtn.disabled = false;
+    }
+  }
+
+  function downloadShowcaseImage() {
+    if (!showcaseFile) return;
+    downloadableFile(showcaseFile,showcaseFile.name);
+    showToast('Collection image downloaded');
+  }
+
+  async function shareShowcaseImage() {
+    if (!showcaseFile || !navigator.share) return;
+    try {
+      await navigator.share({
+        title:'My Sprite Tracker collection',
+        text:'My Sprite Tracker collection',
+        files:[showcaseFile]
+      });
+    } catch (error) {
+      if (error?.name !== 'AbortError') showToast('Sharing is not available here. Download the image instead.');
+    }
+  }
+
   function resetProgress() {
     state = {};
     saveProgress();
@@ -1873,6 +2500,28 @@
     spriteEditorToggle.setAttribute('aria-pressed','false');
     spriteEditorToggle.textContent = 'Edit sprites';
   }
+
+  showcaseBtn.addEventListener('click',openShowcaseDialog);
+  showcaseForm.addEventListener('submit',generateShowcaseImage);
+  [showcaseStatusSelect,showcaseRaritySelect,showcaseSortSelect].forEach((select) => {
+    select.addEventListener('change',() => {
+      clearShowcaseFile();
+      showcaseStatusMessage.textContent = '';
+      showcaseStatusMessage.dataset.state = '';
+      updateShowcaseMatchCount();
+    });
+  });
+  document.getElementById('closeShowcaseBtn').addEventListener('click',() => showcaseDialog.close());
+  downloadShowcaseBtn.addEventListener('click',downloadShowcaseImage);
+  shareShowcaseBtn.addEventListener('click',shareShowcaseImage);
+  showcaseDialog.addEventListener('close',clearShowcaseFile);
+  backupBtn.addEventListener('click',openBackupDialog);
+  document.getElementById('backupRestoreForm').addEventListener('submit',(event) => event.preventDefault());
+  document.getElementById('downloadBackupBtn').addEventListener('click',downloadProgressBackup);
+  backupFileInput.addEventListener('change',() => prepareBackupRestore(backupFileInput.files?.[0]));
+  confirmRestoreBtn.addEventListener('click',restoreSelectedBackup);
+  undoRestoreBtn.addEventListener('click',undoLastRestore);
+  document.getElementById('closeBackupBtn').addEventListener('click',() => backupDialog.close());
 
   spriteSearchInput.addEventListener('input',renderSpriteSearchResults);
   spriteSearchInput.addEventListener('focus',() => {
@@ -1993,6 +2642,6 @@
   const activeHash = `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js?v=72',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js?v=73',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
   }
 })();

@@ -143,7 +143,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=72">
+  <link rel="stylesheet" href="styles.css?v=73">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Skip to checklist</a>
@@ -177,6 +177,11 @@
       </form>
       <div class="sprite-search-results" id="spriteSearchResults" role="listbox" hidden></div>
       <p class="visually-hidden" id="spriteSearchStatus" aria-live="polite"></p>
+    </section>
+
+    <section class="tracker-tools" aria-label="Collection tools">
+      <button id="showcaseBtn" type="button">Create collection image</button>
+      <button id="backupBtn" type="button">Save / restore progress</button>
     </section>
 
     <nav class="rarity-tabs" id="rarityTabs" aria-label="Sprite rarity pages" role="tablist"></nav>
@@ -269,10 +274,85 @@
     </form>
   </dialog>
 
+  <dialog class="reset-dialog showcase-dialog" id="showcaseDialog">
+    <form id="showcaseForm">
+      <h2>Create collection image</h2>
+      <p>Choose which Sprites to include. This only reads your checklist—it does not change your progress.</p>
+      <div class="showcase-filters">
+        <label>
+          <span>Status</span>
+          <select id="showcaseStatus">
+            <option value="collected">All collected</option>
+            <option value="mastered">Mastered</option>
+            <option value="collected-not-mastered">Collected, not mastered</option>
+            <option value="unowned">Unowned</option>
+          </select>
+        </label>
+        <label>
+          <span>Rarity</span>
+          <select id="showcaseRarity">
+            <option value="all">All rarities</option>
+            <option value="Rare">Rare</option>
+            <option value="Epic">Epic</option>
+            <option value="Legendary">Legendary</option>
+            <option value="Mythic">Mythic</option>
+          </select>
+        </label>
+        <label>
+          <span>Order</span>
+          <select id="showcaseSort">
+            <option value="app">App order</option>
+            <option value="name">Name</option>
+            <option value="rarest">Rarest first</option>
+          </select>
+        </label>
+      </div>
+      <p class="showcase-match-count" id="showcaseMatchCount" aria-live="polite"></p>
+      <p class="showcase-status-message" id="showcaseStatusMessage" role="status" aria-live="polite"></p>
+      <div class="showcase-preview-wrap" id="showcasePreviewWrap" hidden>
+        <img id="showcasePreview" alt="Preview of your Sprite collection image">
+      </div>
+      <div class="dialog-actions showcase-actions">
+        <button id="closeShowcaseBtn" type="button">Close</button>
+        <button class="primary-btn" id="generateShowcaseBtn" type="submit">Create image</button>
+        <button id="downloadShowcaseBtn" type="button" hidden>Download image</button>
+        <button id="shareShowcaseBtn" type="button" hidden>Share image</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="reset-dialog backup-dialog" id="backupDialog">
+    <form id="backupRestoreForm">
+      <h2>Save or restore progress</h2>
+      <p>Download a backup file to keep your checklist safe or move it to another browser or device.</p>
+      <div class="backup-tool-grid">
+        <section>
+          <h3>Save a backup</h3>
+          <p>Includes every collected and mastered choice.</p>
+          <button class="primary-btn" id="downloadBackupBtn" type="button">Download backup file</button>
+        </section>
+        <section>
+          <h3>Restore a backup</h3>
+          <p>Choose a backup previously downloaded from this tracker.</p>
+          <label class="backup-file-button" for="backupFileInput">
+            Choose backup file
+            <input id="backupFileInput" type="file" accept=".json,application/json">
+          </label>
+        </section>
+      </div>
+      <p class="backup-restore-status" id="backupRestoreStatus" role="status" aria-live="polite">No backup selected.</p>
+      <div class="dialog-actions">
+        <button id="closeBackupBtn" type="button">Close</button>
+        <button id="undoRestoreBtn" type="button" hidden>Undo last restore</button>
+        <button class="primary-btn" id="confirmRestoreBtn" type="button" disabled>Restore selected backup</button>
+      </div>
+    </form>
+  </dialog>
+
   <div class="status-toast" id="statusToast" role="status" aria-live="polite"></div>
   <noscript>This checklist needs JavaScript enabled to save progress.</noscript>
 
   <script src="data.js?v=67"></script>
-  <script src="app.js?v=72"></script>
+  <script src="app.js?v=73"></script>
 </body>
 </html>

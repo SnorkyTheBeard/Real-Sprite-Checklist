@@ -16,12 +16,14 @@
   const STORAGE_SCOPE = appStorageScope();
   const PROGRESS_KEY = `galaxy_sprite_tracker_progress_v2_${STORAGE_SCOPE}`;
   const VIEW_MODES_KEY = `galaxy_sprite_tracker_view_modes_v1_${STORAGE_SCOPE}`;
+  const SEASON_VIEW_KEY = `galaxy_sprite_tracker_season_view_v1_${STORAGE_SCOPE}`;
   const SPRITE_CARD_EDITS_KEY = `galaxy_sprite_tracker_sprite_cards_v1_${STORAGE_SCOPE}`;
   const PRE_RESTORE_PROGRESS_KEY = `galaxy_sprite_tracker_progress_before_restore_v1_${STORAGE_SCOPE}`;
   const LEGACY_PROGRESS_KEY = 'galaxy_sprite_tracker_progress_v1';
   const BACKUP_FORMAT = 'my-sprite-tracker-backup';
   const BACKUP_VERSION = 1;
   const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
+  const SEASON_VIEWS = ['current','previous','all'];
   const CARD_REORDER_MIME = 'application/x-sprite-card';
   const GITHUB_TOKEN_SESSION_KEY = `galaxy_sprite_tracker_github_token_${STORAGE_SCOPE}`;
   const GITHUB_API_VERSION = '2026-03-10';
@@ -83,6 +85,15 @@
 
   function loadViewModes() {
     return readJson(VIEW_MODES_KEY) || {};
+  }
+
+  function loadSeasonView() {
+    try {
+      const saved = localStorage.getItem(SEASON_VIEW_KEY);
+      return SEASON_VIEWS.includes(saved) ? saved : 'current';
+    } catch {
+      return 'current';
+    }
   }
 
   const DEFAULT_HEADER = {
@@ -312,12 +323,14 @@
   let state = loadProgress();
   let spriteCardEdits = loadSpriteCardEdits();
   let spriteViewModes = loadViewModes();
+  let seasonView = loadSeasonView();
   let spriteEditMode = false;
   let activeRarity = rarityFromHash() || defaultRarity;
   let toastTimer = 0;
   let pendingRestore = null;
   let showcaseObjectUrl = '';
   let showcaseFile = null;
+  let showcaseGenerationToken = 0;
 
   const tabsEl = document.getElementById('rarityTabs');
   const collectionsEl = document.getElementById('collections');
@@ -357,6 +370,7 @@
   const showcaseForm = document.getElementById('showcaseForm');
   const showcaseStatusSelect = document.getElementById('showcaseStatus');
   const showcaseRaritySelect = document.getElementById('showcaseRarity');
+  const showcaseSeasonSelect = document.getElementById('showcaseSeason');
   const showcaseSortSelect = document.getElementById('showcaseSort');
   const showcaseMatchCount = document.getElementById('showcaseMatchCount');
   const showcaseStatusMessage = document.getElementById('showcaseStatusMessage');
@@ -371,6 +385,8 @@
   const backupRestoreStatus = document.getElementById('backupRestoreStatus');
   const confirmRestoreBtn = document.getElementById('confirmRestoreBtn');
   const undoRestoreBtn = document.getElementById('undoRestoreBtn');
+  const seasonViewSelect = document.getElementById('seasonViewSelect');
+  const seasonVaultCount = document.getElementById('seasonVaultCount');
 
   function saveProgress() {
     try {
@@ -403,6 +419,23 @@
     showToast(`${activeRarity}: ${currentSpriteViewMode() === 'list' ? 'list' : 'card'} view`);
   }
 
+  function applySeasonViewControls() {
+    seasonViewSelect.value = seasonView;
+    seasonVaultCount.textContent = `${vaultedSpriteCount()} vaulted`;
+    document.body.classList.toggle('previous-season-view',seasonView === 'previous');
+    document.body.classList.toggle('all-seasons-view',seasonView === 'all');
+    document.body.dataset.seasonView = seasonView;
+  }
+
+  function setSeasonView(mode,{ announce = true } = {}) {
+    const next = SEASON_VIEWS.includes(mode) ? mode : 'current';
+    const changed = seasonView !== next;
+    seasonView = next;
+    try { localStorage.setItem(SEASON_VIEW_KEY,seasonView); } catch { /* The view can remain active for this visit. */ }
+    renderAll();
+    if (announce && changed) showToast(seasonViewLabel());
+  }
+
   function saveSpriteCardEdits() {
     try {
       localStorage.setItem(SPRITE_CARD_EDITS_KEY,JSON.stringify(spriteCardEdits));
@@ -426,6 +459,7 @@
     if (!Array.isArray(edits.publishedAdded)) edits.publishedAdded = [];
     if (!edits.images || typeof edits.images !== 'object' || Array.isArray(edits.images)) edits.images = {};
     if (!edits.percentages || typeof edits.percentages !== 'object' || Array.isArray(edits.percentages)) edits.percentages = {};
+    if (!edits.archived || typeof edits.archived !== 'object' || Array.isArray(edits.archived)) edits.archived = {};
     return edits;
   }
 
@@ -458,10 +492,12 @@
 
   function familyView(family) {
     const custom = design.families[family.id] || {};
+    const cardEdits = spriteCardEdits.families?.[family.id] || {};
     return {
       name:hasOwn(custom,'name') ? custom.name : family.name,
       visible:hasOwn(custom,'visible') ? Boolean(custom.visible) : true,
       deleted:Boolean(custom.deleted),
+      archived:hasOwn(cardEdits,'archivedGroup') ? Boolean(cardEdits.archivedGroup) : Boolean(custom.archived),
       customBg:Boolean(custom.customBg),
       bgColor:custom.bgColor || design.theme.collectionBgColor,
       bgImage:hasOwn(custom,'bgImage') ? custom.bgImage : '',
@@ -478,6 +514,7 @@
       rarityPercentage:hasOwn(cardEdits.percentages,variant.id) ? cardEdits.percentages[variant.id] : String(custom.rarityPercentage || ''),
       visible:hasOwn(custom,'visible') ? Boolean(custom.visible) : true,
       deleted:Boolean(custom.deleted) || (Array.isArray(cardEdits.deleted) && cardEdits.deleted.includes(variant.id)),
+      archived:hasOwn(cardEdits.archived,variant.id) ? Boolean(cardEdits.archived[variant.id]) : Boolean(custom.archived),
       customCard:Boolean(custom.customCard),
       cardColor:custom.cardColor || design.theme.cardBgColor,
       cardImage:hasOwn(custom,'cardImage') ? custom.cardImage : '',
@@ -515,6 +552,41 @@
       const view = variantView(family,variant);
       return !view.deleted && view.visible;
     });
+  }
+
+  function isPreviousSeasonSprite(family,variant) {
+    return Boolean(familyView(family).archived || variantView(family,variant).archived);
+  }
+
+  function variantsForSeason(family,mode = seasonView) {
+    return visibleVariants(family).filter((variant) => {
+      const archived = isPreviousSeasonSprite(family,variant);
+      if (mode === 'previous') return archived;
+      if (mode === 'all') return true;
+      return !archived;
+    });
+  }
+
+  function familyMatchesSeason(family,mode = seasonView) {
+    const group = familyView(family);
+    if (group.deleted || !group.visible) return false;
+    return variantsForSeason(family,mode).length > 0;
+  }
+
+  function vaultedSpriteCount() {
+    return allFamilies().reduce((total,family) => {
+      const group = familyView(family);
+      if (group.deleted || !group.visible) return total;
+      return total + visibleVariants(family).filter((variant) => isPreviousSeasonSprite(family,variant)).length;
+    },0);
+  }
+
+  function seasonViewLabel(mode = seasonView) {
+    return {
+      current:'Current Season',
+      previous:'Previous Seasons',
+      all:'All Seasons'
+    }[mode] || 'Current Season';
   }
 
   function saveCardEditOrRestore(previousEdits) {
@@ -589,27 +661,27 @@
     return id;
   }
 
-  function deleteSpriteCard(family,variant) {
+  function setSpriteArchived(family,variant,archived) {
     const view = variantView(family,variant);
-    if (!window.confirm(`Delete the ${view.name || 'selected'} sprite card from ${familyView(family).name || 'this row'}?`)) return;
+    const destination = archived ? 'Previous Seasons' : 'the Current Season';
+    if (!window.confirm(`${archived ? 'Move' : 'Return'} the ${view.name || 'selected'} sprite card to ${destination}? Its collection progress and artwork will be kept.`)) return;
     const previousEdits = cloneJson(spriteCardEdits);
     const edits = familyCardEdits(family.id);
-    const addedIndex = edits.added.findIndex((item) => item.id === variant.id);
-    const isPublishedVariant = (Array.isArray(family.variants) && family.variants.some((item) => item.id === variant.id))
-      || (Array.isArray(design.families[family.id]?.addedVariants) && design.families[family.id].addedVariants.some((item) => item.id === variant.id))
-      || edits.publishedAdded.includes(variant.id);
-    if (addedIndex >= 0) edits.added.splice(addedIndex,1);
-    if (isPublishedVariant && !edits.deleted.includes(variant.id)) edits.deleted.push(variant.id);
-    edits.order = orderedVariants(family).map((item) => item.id).filter((id) => id !== variant.id);
-    delete edits.images[variant.id];
-    delete edits.percentages[variant.id];
+    edits.archived[variant.id] = Boolean(archived);
     if (!saveCardEditOrRestore(previousEdits)) return;
-    if (state[family.id]) delete state[family.id][variant.id];
-    saveProgress();
-    renderTabs();
-    renderCollections();
-    updateCounters();
-    showToast('Sprite card deleted');
+    renderAll();
+    showToast(archived ? 'Sprite moved to Previous Seasons' : 'Sprite returned to Current Season');
+  }
+
+  function setSpriteGroupArchived(family,archived) {
+    const groupName = familyView(family).name || 'this Sprite group';
+    const destination = archived ? 'Previous Seasons' : 'the Current Season';
+    if (!window.confirm(`${archived ? 'Move' : 'Return'} ${groupName} to ${destination}? Every card, image, and progress choice will be kept.`)) return;
+    const previousEdits = cloneJson(spriteCardEdits);
+    familyCardEdits(family.id).archivedGroup = Boolean(archived);
+    if (!saveCardEditOrRestore(previousEdits)) return;
+    renderAll();
+    showToast(archived ? `${groupName} moved to Previous Seasons` : `${groupName} returned to Current Season`);
   }
 
   function saveVariantOrder(family,order,message = 'Sprite cards moved') {
@@ -623,7 +695,7 @@
   }
 
   function moveSpriteCard(family,variantId,offset) {
-    const visible = visibleVariants(family);
+    const visible = variantsForSeason(family);
     const from = visible.findIndex((variant) => variant.id === variantId);
     const target = from + offset;
     if (from < 0 || target < 0 || target >= visible.length) return;
@@ -808,6 +880,8 @@
       || (Array.isArray(edits.order) && edits.order.length)
       || (edits.images && typeof edits.images === 'object' && Object.keys(edits.images).length)
       || (edits.percentages && typeof edits.percentages === 'object' && Object.keys(edits.percentages).length)
+      || (edits.archived && typeof edits.archived === 'object' && Object.keys(edits.archived).length)
+      || hasOwn(edits,'archivedGroup')
     ));
     const hasNewGroups = Array.isArray(spriteCardEdits.customFamilies) && spriteCardEdits.customFamilies.length > 0;
     const hasChanges = hasFamilyChanges || hasNewGroups;
@@ -927,6 +1001,7 @@
       const family = nextDesign.families[familyId] ||= {};
       family.variants ||= {};
       family.addedVariants = Array.isArray(family.addedVariants) ? family.addedVariants : [];
+      if (hasOwn(edits,'archivedGroup')) family.archived = Boolean(edits.archivedGroup);
 
       (Array.isArray(edits.added) ? edits.added : []).forEach((variant) => {
         if (!variant?.id) return;
@@ -938,6 +1013,11 @@
         }
         family.variants[variant.id] ||= {};
         family.variants[variant.id].deleted = false;
+      });
+
+      Object.entries(edits.archived && typeof edits.archived === 'object' ? edits.archived : {}).forEach(([variantId,archived]) => {
+        family.variants[variantId] ||= {};
+        family.variants[variantId].archived = Boolean(archived);
       });
 
       (Array.isArray(edits.deleted) ? edits.deleted : []).forEach((variantId) => {
@@ -1276,19 +1356,25 @@
     const current = variantState(family.id,variant.id);
     const view = variantView(family,variant);
     const familyInfo = familyView(family);
-    const rowVariants = visibleVariants(family);
+    const previousSeason = isPreviousSeasonSprite(family,variant);
+    const rowVariants = variantsForSeason(family);
     const rowIndex = rowVariants.findIndex((item) => item.id === variant.id);
     const listView = currentSpriteViewMode() === 'list';
     const card = document.createElement('article');
     card.className = 'card';
     card.dataset.familyId = family.id;
     card.dataset.variantId = variant.id;
+    card.classList.toggle('archived-sprite',previousSeason);
     if (view.customCard) applyCustomBackground(card,view.cardColor,view.cardImage,view.cardMode);
 
     const crown = document.createElement('button');
     crown.type = 'button';
     crown.className = 'crown-button';
     crown.innerHTML = crownSvg();
+    const seasonBadge = document.createElement('span');
+    seasonBadge.className = 'sprite-season-badge';
+    seasonBadge.textContent = 'Previous';
+    seasonBadge.hidden = !previousSeason;
 
     const imageWrap = document.createElement('div');
     imageWrap.className = 'image-wrap';
@@ -1337,7 +1423,7 @@
 
     const editorTools = document.createElement('div');
     editorTools.className = 'sprite-card-tools';
-    editorTools.setAttribute('aria-label',`Move or delete ${view.name || 'sprite'} card`);
+    editorTools.setAttribute('aria-label',`Move or archive ${view.name || 'sprite'} card`);
     const moveLeft = document.createElement('button');
     moveLeft.type = 'button';
     moveLeft.className = 'sprite-move-step';
@@ -1356,13 +1442,21 @@
     moveRight.textContent = listView ? '↓' : '→';
     moveRight.disabled = rowIndex < 0 || rowIndex === rowVariants.length - 1;
     moveRight.setAttribute('aria-label',`Move ${view.name || 'sprite'} ${listView ? 'down' : 'right'}`);
-    const deleteButton = document.createElement('button');
-    deleteButton.type = 'button';
-    deleteButton.className = 'sprite-delete-button';
-    deleteButton.textContent = '×';
-    deleteButton.title = 'Delete sprite card';
-    deleteButton.setAttribute('aria-label',`Delete ${view.name || 'sprite'} card`);
-    editorTools.append(moveLeft,moveHandle,moveRight,deleteButton);
+    const archiveButton = document.createElement('button');
+    archiveButton.type = 'button';
+    archiveButton.className = 'sprite-archive-button';
+    archiveButton.textContent = previousSeason ? '↩' : '⇩';
+    archiveButton.title = familyInfo.archived
+      ? 'Return the whole group from its header'
+      : (previousSeason ? 'Return to Current Season' : 'Move to Previous Seasons');
+    archiveButton.disabled = familyInfo.archived;
+    archiveButton.setAttribute(
+      'aria-label',
+      familyInfo.archived
+        ? `${view.name || 'Sprite'} is part of an archived group`
+        : `${previousSeason ? 'Return' : 'Move'} ${view.name || 'sprite'} ${previousSeason ? 'to Current Season' : 'to Previous Seasons'}`
+    );
+    editorTools.append(moveLeft,moveHandle,moveRight,archiveButton);
 
     const percentageEditor = document.createElement('label');
     percentageEditor.className = 'sprite-percentage-editor';
@@ -1416,7 +1510,7 @@
 
     const masterLabel = document.createElement('div');
     masterLabel.className = 'master-label';
-    card.append(crown,imageWrap,editorTools,percentageEditor,variantLine,listLabel,collect,masterLabel);
+    card.append(crown,seasonBadge,imageWrap,editorTools,percentageEditor,variantLine,listLabel,collect,masterLabel);
 
     const toggleCollected = () => {
       current.collected = !current.collected;
@@ -1435,7 +1529,7 @@
     });
     moveLeft.addEventListener('click',() => moveSpriteCard(family,variant.id,-1));
     moveRight.addEventListener('click',() => moveSpriteCard(family,variant.id,1));
-    deleteButton.addEventListener('click',() => deleteSpriteCard(family,variant));
+    archiveButton.addEventListener('click',() => setSpriteArchived(family,variant,!previousSeason));
     percentageInput.addEventListener('change',() => {
       if (!saveRarityPercentage(family,variant,percentageInput.value)) {
         percentageInput.value = String(view.rarityPercentage || '').replace(/%$/,'');
@@ -1528,12 +1622,10 @@
     return card;
   }
 
-  function familyStats(family) {
+  function familyStats(family,mode = seasonView) {
     const group = familyView(family);
-    if (group.deleted || !group.visible) return { total:0, collected:0, mastered:0 };
-    return familyVariants(family).reduce((totals,variant) => {
-      const view = variantView(family,variant);
-      if (view.deleted || !view.visible) return totals;
+    if (group.deleted || !group.visible || !familyMatchesSeason(family,mode)) return { total:0, collected:0, mastered:0 };
+    return variantsForSeason(family,mode).reduce((totals,variant) => {
       const current = variantState(family.id,variant.id);
       totals.total += 1;
       totals.collected += current.collected ? 1 : 0;
@@ -1542,9 +1634,9 @@
     },{ total:0, collected:0, mastered:0 });
   }
 
-  function rarityStats(rarity) {
+  function rarityStats(rarity,mode = seasonView) {
     return allFamilies().filter((family) => familyRarity(family) === rarity).reduce((totals,family) => {
-      const stats = familyStats(family);
+      const stats = familyStats(family,mode);
       totals.total += stats.total;
       totals.collected += stats.collected;
       totals.mastered += stats.mastered;
@@ -1552,9 +1644,9 @@
     },{ total:0, collected:0, mastered:0 });
   }
 
-  function overallStats() {
+  function overallStats(mode = seasonView) {
     return rarities.reduce((totals,rarity) => {
-      const stats = rarityStats(rarity);
+      const stats = rarityStats(rarity,mode);
       totals.total += stats.total;
       totals.collected += stats.collected;
       totals.mastered += stats.mastered;
@@ -1562,8 +1654,8 @@
     },{ total:0, collected:0, mastered:0 });
   }
 
-  function unownedCount() {
-    const overall = overallStats();
+  function unownedCount(mode = seasonView) {
+    const overall = overallStats(mode);
     return Math.max(0,overall.total - overall.collected);
   }
 
@@ -1619,8 +1711,8 @@
 
     allFamilies().filter((family) => unownedPage || familyRarity(family) === activeRarity).forEach((family) => {
       const group = familyView(family);
-      if (group.deleted || !group.visible) return;
-      const rowVariants = visibleVariants(family).filter(
+      if (!familyMatchesSeason(family)) return;
+      const rowVariants = variantsForSeason(family).filter(
         (variant) => !unownedPage || !variantState(family.id,variant.id).collected
       );
       if (!rowVariants.length && !spriteEditMode) return;
@@ -1629,6 +1721,7 @@
       section.className = 'collection';
       section.dataset.rarity = familyRarity(family);
       section.dataset.familyId = family.id;
+      section.classList.toggle('archived-group',group.archived);
       if (group.customBg) {
         section.classList.add('has-custom-background');
         applyCustomBackground(section,group.bgColor,group.bgImage,group.bgMode);
@@ -1636,9 +1729,16 @@
 
       const header = document.createElement('div');
       header.className = 'collection-head';
+      const titleWrap = document.createElement('div');
+      titleWrap.className = 'collection-title-wrap';
       const title = document.createElement('h3');
       title.textContent = group.name || '';
       title.hidden = !group.name;
+      const groupSeasonBadge = document.createElement('span');
+      groupSeasonBadge.className = 'group-season-badge';
+      groupSeasonBadge.textContent = 'Previous season';
+      groupSeasonBadge.hidden = !group.archived;
+      titleWrap.append(title,groupSeasonBadge);
       const meta = document.createElement('div');
       const progressCounts = document.createElement('div');
       const masteredCount = document.createElement('span');
@@ -1646,6 +1746,7 @@
       const hint = document.createElement('span');
       const headerActions = document.createElement('div');
       const addButton = document.createElement('button');
+      const archiveGroupButton = document.createElement('button');
       meta.className = 'collection-meta';
       progressCounts.className = 'collection-progress-counts';
       progressCounts.setAttribute('aria-label',`${group.name || 'Sprite'} progress`);
@@ -1662,9 +1763,18 @@
       addButton.type = 'button';
       addButton.className = 'add-sprite-button';
       addButton.textContent = '+ Add sprite';
+      addButton.hidden = seasonView !== 'current';
       addButton.addEventListener('click',() => openAddSpriteDialog(family.id));
-      headerActions.append(meta,addButton);
-      header.append(title,headerActions);
+      archiveGroupButton.type = 'button';
+      archiveGroupButton.className = 'archive-sprite-group-button';
+      archiveGroupButton.textContent = group.archived ? 'Return group' : 'Vault group';
+      archiveGroupButton.setAttribute(
+        'aria-label',
+        `${group.archived ? 'Return' : 'Move'} ${group.name || 'Sprite group'} ${group.archived ? 'to Current Season' : 'to Previous Seasons'}`
+      );
+      archiveGroupButton.addEventListener('click',() => setSpriteGroupArchived(family,!group.archived));
+      headerActions.append(meta,addButton,archiveGroupButton);
+      header.append(titleWrap,headerActions);
 
       const row = document.createElement('div');
       row.className = 'variant-row';
@@ -1685,7 +1795,17 @@
       collectionsEl.appendChild(section);
     });
 
-    if (unownedPage && !collectionsEl.childElementCount) {
+    if (!collectionsEl.childElementCount && seasonView === 'previous' && unownedPage) {
+      const empty = document.createElement('p');
+      empty.className = 'empty-sprite-row unowned-empty season-vault-empty';
+      empty.textContent = 'You own every Sprite currently in the Season Vault!';
+      collectionsEl.appendChild(empty);
+    } else if (!collectionsEl.childElementCount && seasonView === 'previous') {
+      const empty = document.createElement('p');
+      empty.className = 'empty-sprite-row unowned-empty season-vault-empty';
+      empty.textContent = 'Nothing from this rarity is in the Season Vault yet.';
+      collectionsEl.appendChild(empty);
+    } else if (unownedPage && !collectionsEl.childElementCount) {
       const empty = document.createElement('p');
       empty.className = 'empty-sprite-row unowned-empty';
       empty.textContent = 'You own every Sprite—your collection is complete!';
@@ -1730,6 +1850,7 @@
   function renderAll() {
     applyTheme();
     renderHeader();
+    applySeasonViewControls();
     renderTabs();
     updatePageModeControls();
     applySpriteViewMode();
@@ -1771,13 +1892,15 @@
         if (view.deleted || !view.visible) return [];
         const groupName = group.name || 'Unnamed sprite';
         const variantName = view.name || 'Unnamed variant';
+        const archived = isPreviousSeasonSprite(family,variant);
         return [{
           familyId:family.id,
           variantId:variant.id,
           rarity,
           groupName,
           variantName,
-          searchText:normalizeSearchText(`${groupName} ${variantName} ${rarity}`)
+          archived,
+          searchText:normalizeSearchText(`${groupName} ${variantName} ${rarity} ${archived ? 'previous season vault archived' : 'current season'}`)
         }];
       });
     });
@@ -1811,6 +1934,8 @@
   function openSpriteSearchResult(entry) {
     closeSpriteSearchResults();
     spriteSearchInput.blur();
+    if (entry.archived && seasonView === 'current') setSeasonView('previous',{ announce:false });
+    else if (!entry.archived && seasonView === 'previous') setSeasonView('current',{ announce:false });
     switchRarity(entry.rarity,{ historyMode:'push' });
     requestAnimationFrame(() => {
       const card = [...document.querySelectorAll('.card')].find((item) => item.dataset.familyId === entry.familyId && item.dataset.variantId === entry.variantId);
@@ -1848,7 +1973,7 @@
         button.className = 'sprite-search-result';
         button.setAttribute('role','option');
         title.textContent = `${entry.groupName} — ${entry.variantName}`;
-        detail.textContent = `${entry.rarity} sprite`;
+        detail.textContent = `${entry.rarity} sprite · ${entry.archived ? 'Previous Seasons' : 'Current Season'}`;
         status.className = 'sprite-search-result-status';
         status.textContent = spriteSearchState(entry);
         text.append(title,detail);
@@ -1923,6 +2048,10 @@
     )));
   }
 
+  function sanitizeSeasonView(value) {
+    return SEASON_VIEWS.includes(value) ? value : 'current';
+  }
+
   function progressSnapshotStats(progress) {
     return Object.values(progress || {}).reduce((totals,variants) => {
       if (!variants || typeof variants !== 'object') return totals;
@@ -1943,7 +2072,8 @@
       exportedAt:new Date().toISOString(),
       app:'My Sprite Tracker',
       progress:sanitizeProgress(state),
-      viewModes:sanitizeViewModes(spriteViewModes)
+      viewModes:sanitizeViewModes(spriteViewModes),
+      seasonView:sanitizeSeasonView(seasonView)
     };
   }
 
@@ -1975,7 +2105,8 @@
     }
     return {
       progress:sanitizeProgress(value.progress),
-      viewModes:sanitizeViewModes(value.viewModes)
+      viewModes:sanitizeViewModes(value.viewModes),
+      seasonView:sanitizeSeasonView(value.seasonView)
     };
   }
 
@@ -2026,7 +2157,8 @@
     if (!pendingRestore) return;
     const safetyCopy = {
       progress:sanitizeProgress(state),
-      viewModes:sanitizeViewModes(spriteViewModes)
+      viewModes:sanitizeViewModes(spriteViewModes),
+      seasonView:sanitizeSeasonView(seasonView)
     };
     try {
       localStorage.setItem(PRE_RESTORE_PROGRESS_KEY,JSON.stringify(safetyCopy));
@@ -2037,11 +2169,13 @@
     }
     state = pendingRestore.progress;
     spriteViewModes = pendingRestore.viewModes;
+    seasonView = pendingRestore.seasonView;
     if (!saveProgress()) {
       state = safetyCopy.progress;
       return;
     }
     try { localStorage.setItem(VIEW_MODES_KEY,JSON.stringify(spriteViewModes)); } catch { /* Progress is still safely restored. */ }
+    try { localStorage.setItem(SEASON_VIEW_KEY,seasonView); } catch { /* The restored view remains active for this visit. */ }
     pendingRestore = null;
     backupDialog.close();
     renderAll();
@@ -2055,8 +2189,10 @@
       const saved = JSON.parse(raw);
       state = sanitizeProgress(saved.progress);
       spriteViewModes = sanitizeViewModes(saved.viewModes);
+      seasonView = sanitizeSeasonView(saved.seasonView);
       if (!saveProgress()) throw new Error('Progress could not be saved.');
       localStorage.setItem(VIEW_MODES_KEY,JSON.stringify(spriteViewModes));
+      localStorage.setItem(SEASON_VIEW_KEY,seasonView);
       localStorage.removeItem(PRE_RESTORE_PROGRESS_KEY);
       backupDialog.close();
       renderAll();
@@ -2071,6 +2207,7 @@
     return {
       status:showcaseStatusSelect.value,
       rarity:showcaseRaritySelect.value,
+      season:sanitizeSeasonView(showcaseSeasonSelect.value),
       sort:showcaseSortSelect.value
     };
   }
@@ -2080,6 +2217,15 @@
       collected:'All collected',
       mastered:'Mastered',
       'collected-not-mastered':'Collected, not mastered',
+      unowned:'Unowned'
+    }[status] || 'Collected';
+  }
+
+  function showcaseImageStatusLabel(status) {
+    return {
+      collected:'Collected',
+      mastered:'Mastered',
+      'collected-not-mastered':'Collected, Not Mastered',
       unowned:'Unowned'
     }[status] || 'Collected';
   }
@@ -2103,9 +2249,9 @@
     allFamilies().forEach((family) => {
       const group = familyView(family);
       const rarity = familyRarity(family);
-      if (group.deleted || !group.visible || !rarities.includes(rarity)) return;
+      if (group.deleted || !group.visible || !rarities.includes(rarity) || !familyMatchesSeason(family,selection.season)) return;
       if (selection.rarity !== 'all' && rarity !== selection.rarity) return;
-      visibleVariants(family).forEach((variant) => {
+      variantsForSeason(family,selection.season).forEach((variant) => {
         const current = state[family.id]?.[variant.id] || { collected:false, mastered:false };
         if (!showcaseStatusMatches(current,selection.status)) return;
         const view = variantView(family,variant);
@@ -2118,6 +2264,7 @@
           rarityPercentage:view.rarityPercentage || '',
           image:displayImageSource(view.image),
           background:displayImageSource(variantBackgroundSource(variant)),
+          previousSeason:isPreviousSeasonSprite(family,variant),
           collected:current.collected === true || current.mastered === true,
           mastered:current.mastered === true
         });
@@ -2141,6 +2288,7 @@
   }
 
   function clearShowcaseFile() {
+    showcaseGenerationToken += 1;
     if (showcaseObjectUrl) URL.revokeObjectURL(showcaseObjectUrl);
     showcaseObjectUrl = '';
     showcaseFile = null;
@@ -2154,6 +2302,7 @@
     clearShowcaseFile();
     showcaseStatusSelect.value = isUnownedPage() ? 'unowned' : 'collected';
     showcaseRaritySelect.value = rarities.includes(activeRarity) ? activeRarity : 'all';
+    showcaseSeasonSelect.value = seasonView;
     showcaseSortSelect.value = 'app';
     showcaseStatusMessage.textContent = '';
     showcaseStatusMessage.dataset.state = '';
@@ -2227,12 +2376,12 @@
     return limited;
   }
 
-  function canvasImage(source,cache) {
+  function canvasImage(source,cache = null) {
     if (!source) return Promise.resolve(null);
     const resolved = (() => {
       try { return new URL(source,document.baseURI).href; } catch { return source; }
     })();
-    if (cache.has(resolved)) return cache.get(resolved);
+    if (cache?.has(resolved)) return cache.get(resolved);
     const promise = new Promise((resolve) => {
       const image = new Image();
       let settled = false;
@@ -2248,7 +2397,37 @@
       if (/^https?:/i.test(resolved)) image.crossOrigin = 'anonymous';
       image.src = resolved;
     });
-    cache.set(resolved,promise);
+    if (cache) cache.set(resolved,promise);
+    return promise;
+  }
+
+  function releaseCanvasImage(image) {
+    if (!image) return;
+    image.onload = null;
+    image.onerror = null;
+    try { image.src = ''; } catch { /* Let the browser release it naturally. */ }
+  }
+
+  function canvasBackgroundSurface(source,width,height,cache) {
+    if (!source) return Promise.resolve(null);
+    const key = `${source}|${Math.ceil(width)}x${Math.ceil(height)}`;
+    if (cache.has(key)) return cache.get(key);
+    const promise = (async () => {
+      const image = await canvasImage(source);
+      if (!image) return null;
+      const surface = document.createElement('canvas');
+      surface.width = Math.max(1,Math.ceil(width));
+      surface.height = Math.max(1,Math.ceil(height));
+      const surfaceContext = surface.getContext('2d');
+      if (!surfaceContext) {
+        releaseCanvasImage(image);
+        return null;
+      }
+      drawImageCover(surfaceContext,image,0,0,surface.width,surface.height);
+      releaseCanvasImage(image);
+      return surface;
+    })();
+    cache.set(key,promise);
     return promise;
   }
 
@@ -2263,81 +2442,100 @@
 
   function drawShowcaseBackground(context,width,height) {
     const gradient = context.createLinearGradient(0,0,width,height);
-    gradient.addColorStop(0,'#080c25');
-    gradient.addColorStop(.45,'#16255b');
-    gradient.addColorStop(1,'#25113d');
+    gradient.addColorStop(0,'#31323a');
+    gradient.addColorStop(.52,'#403d46');
+    gradient.addColorStop(1,'#353740');
     context.fillStyle = gradient;
     context.fillRect(0,0,width,height);
-    context.fillStyle = 'rgba(255,255,255,.025)';
-    for (let y = 0; y < height; y += 72) context.fillRect(0,y,width,1);
-    for (let index = 0; index < Math.min(90,Math.ceil(height / 65)); index += 1) {
-      const x = (index * 173 + 91) % width;
-      const y = (index * 251 + 47) % height;
-      context.globalAlpha = .2 + (index % 4) * .08;
-      context.fillStyle = index % 3 ? '#9be8ff' : '#ffd45f';
+
+    const bubbleCount = Math.min(24,Math.max(12,Math.ceil(height / 500) * 3));
+    for (let index = 0; index < bubbleCount; index += 1) {
+      const x = (index * 317 + 107) % width;
+      const y = (index * 463 + 163) % height;
+      const radius = 38 + (index % 5) * 18;
+      context.globalAlpha = .035 + (index % 3) * .012;
+      context.fillStyle = index % 2 ? '#d9d2e5' : '#c9dde0';
       context.beginPath();
-      context.arc(x,y,index % 4 === 0 ? 2.2 : 1.3,0,Math.PI * 2);
+      context.arc(x,y,radius,0,Math.PI * 2);
       context.fill();
     }
     context.globalAlpha = 1;
   }
 
-  async function drawShowcaseCard(context,entry,x,y,width,height,imageCache) {
-    const wellX = x + 12;
-    const wellY = y + 12;
-    const wellWidth = width - 24;
-    const wellHeight = 205;
-    fillRounded(context,x,y,width,height,20,'rgba(8,10,24,.82)');
-    context.strokeStyle = entry.mastered ? '#ffd45f' : 'rgba(255,255,255,.25)';
-    context.lineWidth = entry.mastered ? 3 : 1.5;
-    roundedPath(context,x,y,width,height,20);
+  async function drawShowcaseCard(context,entry,x,y,width,height,backgroundCache) {
+    const compact = width < 250;
+    const padding = compact ? 9 : 12;
+    const radius = compact ? 16 : 20;
+    const wellX = x + padding;
+    const wellY = y + padding;
+    const wellWidth = width - padding * 2;
+    const wellHeight = height - (compact ? 116 : 126);
+    const groupY = wellY + wellHeight + (compact ? 24 : 30);
+    const variantY = groupY + (compact ? 22 : 27);
+    fillRounded(context,x,y,width,height,radius,'rgba(23,24,31,.88)');
+    context.strokeStyle = entry.mastered ? '#e9c96f' : 'rgba(255,255,255,.2)';
+    context.lineWidth = entry.mastered ? 2.5 : 1.25;
+    roundedPath(context,x,y,width,height,radius);
     context.stroke();
 
     context.save();
-    roundedPath(context,wellX,wellY,wellWidth,wellHeight,14);
+    roundedPath(context,wellX,wellY,wellWidth,wellHeight,compact ? 11 : 14);
     context.clip();
     const wellGradient = context.createLinearGradient(wellX,wellY,wellX + wellWidth,wellY + wellHeight);
-    wellGradient.addColorStop(0,'#181b32');
-    wellGradient.addColorStop(1,'#080a13');
+    wellGradient.addColorStop(0,'#242630');
+    wellGradient.addColorStop(1,'#111218');
     context.fillStyle = wellGradient;
     context.fillRect(wellX,wellY,wellWidth,wellHeight);
-    const background = await canvasImage(entry.background,imageCache);
-    if (background) drawImageCover(context,background,wellX,wellY,wellWidth,wellHeight);
-    const sprite = await canvasImage(entry.image,imageCache);
-    if (sprite) drawImageContain(context,sprite,wellX,wellY,wellWidth,wellHeight,14);
+    const background = await canvasBackgroundSurface(entry.background,wellWidth,wellHeight,backgroundCache);
+    if (background) context.drawImage(background,wellX,wellY,wellWidth,wellHeight);
+    const sprite = await canvasImage(entry.image);
+    if (sprite) drawImageContain(context,sprite,wellX,wellY,wellWidth,wellHeight,compact ? 8 : 13);
     else {
-      context.fillStyle = 'rgba(255,255,255,.65)';
-      context.font = '700 21px "UserCustomFont","Trebuchet MS",sans-serif';
+      context.fillStyle = 'rgba(255,255,255,.62)';
+      context.font = `700 ${compact ? 15 : 19}px "UserCustomFont","Trebuchet MS",sans-serif`;
       context.textAlign = 'center';
       context.fillText('Image unavailable',wellX + wellWidth / 2,wellY + wellHeight / 2);
     }
     context.restore();
+    releaseCanvasImage(sprite);
 
     context.textAlign = 'left';
     context.fillStyle = '#fff';
-    context.font = '700 24px "UserCustomFont","Trebuchet MS",sans-serif';
-    context.fillText(fitCanvasText(context,entry.groupName,width - 28),x + 14,y + 246);
-    context.fillStyle = '#c9cee0';
-    context.font = '600 19px "UserCustomFont","Trebuchet MS",sans-serif';
-    context.fillText(fitCanvasText(context,entry.variantName,width - 28),x + 14,y + 274);
+    context.font = `700 ${compact ? 17 : 23}px "UserCustomFont","Trebuchet MS",sans-serif`;
+    context.fillText(fitCanvasText(context,entry.groupName,width - padding * 2),x + padding,groupY);
+    context.fillStyle = '#d3d4dd';
+    context.font = `600 ${compact ? 14 : 18}px "UserCustomFont","Trebuchet MS",sans-serif`;
+    context.fillText(fitCanvasText(context,entry.variantName,width - padding * 2),x + padding,variantY);
 
+    const badgeHeight = compact ? 23 : 28;
+    const badgeWidth = compact ? 70 : (entry.rarityPercentage ? 100 : 86);
+    const badgeY = y + height - badgeHeight - (compact ? 9 : 12);
     const color = rarityColor(entry.rarity);
-    fillRounded(context,x + 14,y + height - 43,entry.rarityPercentage ? 102 : 88,28,14,color);
+    fillRounded(context,x + padding,badgeY,badgeWidth,badgeHeight,badgeHeight / 2,color);
     context.fillStyle = entry.rarity === 'Mythic' ? '#241900' : '#fff';
-    context.font = '700 14px "UserCustomFont","Trebuchet MS",sans-serif';
+    context.font = `700 ${compact ? 10 : 13}px "UserCustomFont","Trebuchet MS",sans-serif`;
     context.textAlign = 'center';
-    context.fillText(entry.rarity,x + 14 + (entry.rarityPercentage ? 102 : 88) / 2,y + height - 23);
+    context.fillText(entry.rarity,x + padding + badgeWidth / 2,badgeY + badgeHeight * .7);
     if (entry.rarityPercentage) {
       context.fillStyle = '#fff';
-      context.font = '700 15px "UserCustomFont","Trebuchet MS",sans-serif';
+      context.font = `700 ${compact ? 11 : 14}px "UserCustomFont","Trebuchet MS",sans-serif`;
       context.textAlign = 'right';
-      context.fillText(entry.rarityPercentage,x + width - 14,y + height - 23);
+      context.fillText(entry.rarityPercentage,x + width - padding,badgeY + badgeHeight * .7);
     }
     if (entry.mastered) {
-      context.fillStyle = '#ffd45f';
-      context.font = '700 23px "UserCustomFont","Trebuchet MS",sans-serif';
+      context.fillStyle = '#f2d77c';
+      context.font = `700 ${compact ? 18 : 22}px "UserCustomFont","Trebuchet MS",sans-serif`;
       context.textAlign = 'right';
-      context.fillText('★',x + width - 14,y + 37);
+      context.fillText('★',x + width - padding,wellY + (compact ? 21 : 26));
+    }
+    if (entry.previousSeason) {
+      const previousWidth = compact ? 68 : 88;
+      const previousHeight = compact ? 20 : 24;
+      fillRounded(context,wellX,wellY,previousWidth,previousHeight,previousHeight / 2,'rgba(22,23,29,.82)');
+      context.fillStyle = '#e1e2e8';
+      context.font = `700 ${compact ? 8 : 11}px "UserCustomFont","Trebuchet MS",sans-serif`;
+      context.textAlign = 'center';
+      context.fillText('PREVIOUS',wellX + previousWidth / 2,wellY + previousHeight * .7);
     }
   }
 
@@ -2347,73 +2545,108 @@
     });
   }
 
-  async function createShowcaseImage(entries,selection) {
-    if (entries.length > 240) throw new Error('Choose a narrower filter so the image contains 240 Sprites or fewer.');
+  function ensureShowcaseGenerationActive(generationToken) {
+    if (generationToken === showcaseGenerationToken) return;
+    const error = new Error('Image creation canceled.');
+    error.name = 'AbortError';
+    throw error;
+  }
+
+  async function createShowcaseImage(entries,selection,generationToken) {
+    if (entries.length > 120) throw new Error('Choose a narrower filter so the image contains 120 Sprites or fewer.');
     if (document.fonts?.ready) {
       try { await document.fonts.ready; } catch { /* Use the fallback font. */ }
     }
-    const width = 1400;
-    const margin = 48;
-    const gap = 18;
-    const columns = 5;
-    const headerHeight = 248;
+    ensureShowcaseGenerationActive(generationToken);
+
+    const width = 1080;
+    const columns = entries.length <= 18 ? 3 : 4;
+    const margin = columns === 3 ? 80 : 58;
+    const gap = columns === 3 ? 20 : 14;
+    const rowGap = columns === 3 ? 20 : 14;
+    const headerHeight = selection.season === 'current' ? 190 : 210;
     const cardWidth = (width - margin * 2 - gap * (columns - 1)) / columns;
-    const cardHeight = 330;
+    const cardHeight = columns === 3 ? 365 : 285;
     const rows = Math.ceil(entries.length / columns);
-    const footerHeight = 148;
-    const height = headerHeight + rows * cardHeight + Math.max(0,rows - 1) * gap + footerHeight;
+    const contentBottom = headerHeight + rows * cardHeight + Math.max(0,rows - 1) * rowGap;
+    const footerMinimum = 220;
+    const height = Math.max(1350,contentBottom + footerMinimum);
+    if (height > 15000 || width * height > 13_500_000) {
+      throw new Error('Choose a narrower filter so the portrait image stays within this phone’s safe size.');
+    }
+
     const canvas = document.createElement('canvas');
+    const backgroundCache = new Map();
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext('2d');
     if (!context) throw new Error('This browser could not open the image creator.');
-    drawShowcaseBackground(context,width,height);
 
-    const selectionLabel = `${showcaseStatusLabel(selection.status)} · ${selection.rarity === 'all' ? 'All rarities' : selection.rarity}`;
-    const overall = overallStats();
-    context.textAlign = 'left';
-    context.fillStyle = '#fff';
-    context.font = '700 70px "UserCustomFont","Trebuchet MS",sans-serif';
-    context.fillText('My Sprite Tracker',margin,91);
-    context.fillStyle = '#cbd7ff';
-    context.font = '600 30px "UserCustomFont","Trebuchet MS",sans-serif';
-    context.fillText(selectionLabel,margin,139);
-    context.fillStyle = '#fff';
-    context.font = '700 25px "UserCustomFont","Trebuchet MS",sans-serif';
-    context.fillText(`${entries.length} Sprite${entries.length === 1 ? '' : 's'} shown`,margin,190);
-    context.textAlign = 'right';
-    context.fillStyle = '#9be8ff';
-    context.fillText(`${overall.collected}/${overall.total} collected`,width - margin,91);
-    context.fillStyle = '#ffd45f';
-    context.fillText(`${overall.mastered}/${overall.total} mastered`,width - margin,129);
+    try {
+      drawShowcaseBackground(context,width,height);
 
-    const imageCache = new Map();
-    for (let index = 0; index < entries.length; index += 1) {
-      const column = index % columns;
-      const row = Math.floor(index / columns);
-      const x = margin + column * (cardWidth + gap);
-      const y = headerHeight + row * (cardHeight + gap);
-      await drawShowcaseCard(context,entries[index],x,y,cardWidth,cardHeight,imageCache);
-      if ((index + 1) % 10 === 0) {
-        showcaseStatusMessage.textContent = `Drawing Sprite ${index + 1} of ${entries.length}…`;
-        await new Promise((resolve) => requestAnimationFrame(resolve));
+      const rarityLabel = selection.rarity === 'all' ? 'All Rarities' : selection.rarity;
+      const selectionLabel = `${showcaseImageStatusLabel(selection.status)} - ${rarityLabel}`;
+      context.textAlign = 'center';
+      context.fillStyle = '#fff';
+      context.font = '700 62px "UserCustomFont","Trebuchet MS",sans-serif';
+      context.fillText('My Sprite Tracker',width / 2,76);
+      context.fillStyle = '#e3e1e8';
+      context.font = '600 29px "UserCustomFont","Trebuchet MS",sans-serif';
+      context.fillText(selectionLabel,width / 2,126);
+      if (selection.season !== 'current') {
+        context.fillStyle = '#bbb9c4';
+        context.font = '700 15px "UserCustomFont","Trebuchet MS",sans-serif';
+        context.fillText(seasonViewLabel(selection.season).toUpperCase(),width / 2,160);
       }
+
+      for (let index = 0; index < entries.length; index += 1) {
+        ensureShowcaseGenerationActive(generationToken);
+        const row = Math.floor(index / columns);
+        const firstIndexInRow = row * columns;
+        const itemsInRow = Math.min(columns,entries.length - firstIndexInRow);
+        const itemInRow = index - firstIndexInRow;
+        const rowWidth = itemsInRow * cardWidth + Math.max(0,itemsInRow - 1) * gap;
+        const rowStartX = (width - rowWidth) / 2;
+        const x = rowStartX + itemInRow * (cardWidth + gap);
+        const y = headerHeight + row * (cardHeight + rowGap);
+        await drawShowcaseCard(context,entries[index],x,y,cardWidth,cardHeight,backgroundCache);
+        if ((index + 1) % 4 === 0 || index === entries.length - 1) {
+          showcaseStatusMessage.textContent = `Drawing Sprite ${index + 1} of ${entries.length}…`;
+          await new Promise((resolve) => requestAnimationFrame(resolve));
+        }
+      }
+
+      ensureShowcaseGenerationActive(generationToken);
+      const footerCenterY = contentBottom + (height - contentBottom) / 2;
+      const link = 'snorkythebeard.github.io/Real-Sprite-Checklist';
+      context.textAlign = 'center';
+      context.fillStyle = '#e8e7ec';
+      context.font = '600 16px "UserCustomFont","Trebuchet MS",sans-serif';
+      context.fillText(link,width / 2,footerCenterY - 22);
+
+      const disclaimer = document.querySelector('.fan-content-disclaimer')?.textContent?.trim() || '';
+      context.fillStyle = '#aaa9b2';
+      context.font = '500 11px "UserCustomFont","Trebuchet MS",sans-serif';
+      const lines = wrappedCanvasLines(context,disclaimer,width - 190,3);
+      const disclaimerStartY = footerCenterY + 9;
+      lines.forEach((line,index) => context.fillText(line,width / 2,disclaimerStartY + index * 16));
+
+      ensureShowcaseGenerationActive(generationToken);
+      return await canvasToBlob(canvas,'image/jpeg',.88);
+    } finally {
+      for (const surfacePromise of backgroundCache.values()) {
+        try {
+          const surface = await surfacePromise;
+          if (surface) {
+            surface.width = 1;
+            surface.height = 1;
+          }
+        } catch { /* The cache is only a performance helper. */ }
+      }
+      canvas.width = 1;
+      canvas.height = 1;
     }
-
-    const footerY = height - footerHeight;
-    context.fillStyle = 'rgba(4,5,15,.52)';
-    context.fillRect(0,footerY,width,footerHeight);
-    context.textAlign = 'left';
-    context.fillStyle = '#fff';
-    context.font = '700 22px "UserCustomFont","Trebuchet MS",sans-serif';
-    context.fillText('snorkythebeard.github.io/Real-Sprite-Checklist/',margin,footerY + 45);
-    const disclaimer = document.querySelector('.fan-content-disclaimer')?.textContent?.trim() || '';
-    context.fillStyle = '#aeb5ca';
-    context.font = '500 16px "UserCustomFont","Trebuchet MS",sans-serif';
-    const lines = wrappedCanvasLines(context,disclaimer,width - margin * 2,3);
-    lines.forEach((line,index) => context.fillText(line,margin,footerY + 79 + index * 22));
-
-    return canvasToBlob(canvas,'image/jpeg',.92);
   }
 
   async function generateShowcaseImage(event) {
@@ -2426,14 +2659,16 @@
       return;
     }
     clearShowcaseFile();
+    const generationToken = showcaseGenerationToken;
     generateShowcaseBtn.disabled = true;
     showcaseStatusMessage.dataset.state = '';
     showcaseStatusMessage.textContent = `Creating an image with ${entries.length} Sprites…`;
     try {
-      const blob = await createShowcaseImage(entries,selection);
+      const blob = await createShowcaseImage(entries,selection,generationToken);
+      ensureShowcaseGenerationActive(generationToken);
       const statusSlug = selection.status.replace(/[^a-z0-9]+/g,'-');
       const raritySlug = selection.rarity === 'all' ? 'all-rarities' : selection.rarity.toLowerCase();
-      const filename = `my-sprite-tracker-${statusSlug}-${raritySlug}.jpg`;
+      const filename = `my-sprite-tracker-${statusSlug}-${raritySlug}-${selection.season}-season.jpg`;
       showcaseFile = new File([blob],filename,{ type:'image/jpeg' });
       showcaseObjectUrl = URL.createObjectURL(showcaseFile);
       showcasePreview.src = showcaseObjectUrl;
@@ -2445,10 +2680,11 @@
       showcaseStatusMessage.dataset.state = 'success';
       showcaseStatusMessage.textContent = 'Your collection image is ready.';
     } catch (error) {
+      if (error?.name === 'AbortError') return;
       showcaseStatusMessage.dataset.state = 'error';
       showcaseStatusMessage.textContent = error.message || 'The image could not be created.';
     } finally {
-      generateShowcaseBtn.disabled = false;
+      if (generationToken === showcaseGenerationToken) generateShowcaseBtn.disabled = false;
     }
   }
 
@@ -2494,6 +2730,7 @@
     const unownedPage = isUnownedPage();
     document.body.classList.toggle('unowned-page',unownedPage);
     spriteEditorToggle.hidden = unownedPage;
+    addSpriteGroupBtn.hidden = unownedPage || seasonView !== 'current';
     if (!unownedPage || !spriteEditMode) return;
     spriteEditMode = false;
     document.body.classList.remove('sprite-edit-mode');
@@ -2501,9 +2738,10 @@
     spriteEditorToggle.textContent = 'Edit sprites';
   }
 
+  seasonViewSelect.addEventListener('change',() => setSeasonView(seasonViewSelect.value));
   showcaseBtn.addEventListener('click',openShowcaseDialog);
   showcaseForm.addEventListener('submit',generateShowcaseImage);
-  [showcaseStatusSelect,showcaseRaritySelect,showcaseSortSelect].forEach((select) => {
+  [showcaseStatusSelect,showcaseRaritySelect,showcaseSeasonSelect,showcaseSortSelect].forEach((select) => {
     select.addEventListener('change',() => {
       clearShowcaseFile();
       showcaseStatusMessage.textContent = '';
@@ -2642,6 +2880,6 @@
   const activeHash = `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js?v=73',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js?v=75',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
   }
 })();

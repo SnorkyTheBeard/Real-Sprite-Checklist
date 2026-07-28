@@ -143,7 +143,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=73">
+  <link rel="stylesheet" href="styles.css?v=75">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Skip to checklist</a>
@@ -182,6 +182,16 @@
     <section class="tracker-tools" aria-label="Collection tools">
       <button id="showcaseBtn" type="button">Create collection image</button>
       <button id="backupBtn" type="button">Save / restore progress</button>
+    </section>
+
+    <section class="season-vault-bar" aria-label="Season Vault">
+      <label for="seasonViewSelect">Season Vault</label>
+      <select id="seasonViewSelect">
+        <option value="current">Current Season</option>
+        <option value="previous">Previous Seasons</option>
+        <option value="all">All Seasons</option>
+      </select>
+      <span id="seasonVaultCount">0 vaulted</span>
     </section>
 
     <nav class="rarity-tabs" id="rarityTabs" aria-label="Sprite rarity pages" role="tablist"></nav>
@@ -260,7 +270,7 @@
   <dialog class="reset-dialog publish-sprites-dialog" id="publishSpritesDialog">
     <form id="publishSpritesForm">
       <h2>Publish sprite changes</h2>
-      <p>This publishes new sprite groups plus sprite-card additions, deletions, order, and uploaded sprite images.</p>
+      <p>This publishes new Sprite groups, card additions and order, uploaded images, rarity percentages, and Season Vault changes.</p>
       <label class="add-sprite-label" for="githubTokenInput">GitHub token</label>
       <input id="githubTokenInput" type="password" required autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste token here">
       <p class="publish-token-help">
@@ -296,6 +306,14 @@
             <option value="Epic">Epic</option>
             <option value="Legendary">Legendary</option>
             <option value="Mythic">Mythic</option>
+          </select>
+        </label>
+        <label>
+          <span>Season</span>
+          <select id="showcaseSeason">
+            <option value="current">Current Season</option>
+            <option value="previous">Previous Seasons</option>
+            <option value="all">All Seasons</option>
           </select>
         </label>
         <label>
@@ -353,6 +371,6 @@
   <noscript>This checklist needs JavaScript enabled to save progress.</noscript>
 
   <script src="data.js?v=67"></script>
-  <script src="app.js?v=73"></script>
+  <script src="app.js?v=75"></script>
 </body>
 </html>

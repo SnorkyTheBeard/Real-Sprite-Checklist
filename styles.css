@@ -528,6 +528,7 @@ h4,
 .sprite-editor-toggle,
 .add-sprite-button,
 .add-sprite-group-button,
+.archive-sprite-group-button,
 .publish-sprites-button,
 .sprite-card-tools button {
   color:#fff;
@@ -571,6 +572,16 @@ h4,
   white-space:nowrap;
 }
 
+.archive-sprite-group-button {
+  display:none;
+  min-height:34px;
+  padding:6px 10px;
+  color:#fff;
+  border-radius:11px;
+  font-size:10px;
+  white-space:nowrap;
+}
+
 .add-sprite-group-button {
   display:none;
   min-height:38px;
@@ -588,6 +599,17 @@ body.sprite-edit-mode .add-sprite-button {
   display:inline-flex;
   align-items:center;
   justify-content:center;
+}
+
+body.sprite-edit-mode .archive-sprite-group-button {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.add-sprite-button[hidden],
+.add-sprite-group-button[hidden] {
+  display:none !important;
 }
 
 .publish-sprites-button {
@@ -616,7 +638,7 @@ body.sprite-edit-mode .publish-sprites-button {
 
 .sprite-card-tools {
   display:none;
-  grid-template-columns:34px minmax(42px,1fr) 34px 34px;
+  grid-template-columns:34px minmax(42px,1fr) 34px 38px;
   gap:4px;
   margin:8px 0 0;
 }
@@ -683,11 +705,11 @@ body.sprite-edit-mode .sprite-percentage-editor {
   cursor:grabbing;
 }
 
-.sprite-card-tools .sprite-delete-button {
+.sprite-card-tools .sprite-archive-button {
   color:#fff;
-  border-color:rgba(255,137,151,.7);
-  background:rgba(121,24,43,.88);
-  font-size:20px;
+  border-color:rgba(255,212,95,.7);
+  background:rgba(92,63,8,.9);
+  font-size:18px;
 }
 
 .sprite-image-edit-hint {
@@ -1271,7 +1293,9 @@ body.unowned-page .sprite-editor-toggle {
 .showcase-preview-wrap img {
   display:block;
   width:100%;
+  max-width:430px;
   height:auto;
+  margin-inline:auto;
   border-radius:9px;
 }
 
@@ -1356,5 +1380,140 @@ body.unowned-page .sprite-editor-toggle {
 
   .showcase-actions {
     grid-template-columns:1fr 1fr;
+  }
+}
+
+/* Season Vault keeps retired Sprites and their progress available. */
+.season-vault-bar {
+  width:min(100%,560px);
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:9px;
+  margin:12px auto 0;
+  padding:8px 10px;
+  color:#fff;
+  border:1px solid rgba(255,255,255,.23);
+  border-radius:16px;
+  background:rgba(8,10,20,.7);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 6px 18px rgba(0,0,0,.22);
+  -webkit-backdrop-filter:blur(12px);
+  backdrop-filter:blur(12px);
+}
+
+.season-vault-bar label {
+  font-size:12px;
+  font-weight:900;
+  white-space:nowrap;
+}
+
+.season-vault-bar select {
+  width:100%;
+  min-width:0;
+  min-height:38px;
+  padding:7px 30px 7px 10px;
+  color:#fff;
+  border:1px solid rgba(255,255,255,.2);
+  border-radius:11px;
+  outline:none;
+  background:#252552;
+  font-family:"UserCustomFont","Trebuchet MS",sans-serif !important;
+  font-size:14px;
+  font-weight:800;
+}
+
+.season-vault-bar select:focus {
+  border-color:#9be8ff;
+  box-shadow:0 0 0 3px rgba(89,200,255,.22);
+}
+
+.season-vault-bar span {
+  color:#fff;
+  font-size:11px;
+  font-weight:900;
+  white-space:nowrap;
+}
+
+body.previous-season-view .season-vault-bar {
+  border-color:rgba(255,212,95,.55);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 0 22px rgba(255,212,95,.12);
+}
+
+.collection-title-wrap {
+  min-width:0;
+}
+
+.group-season-badge {
+  display:inline-flex;
+  margin-top:5px;
+  padding:3px 7px;
+  color:#171008;
+  border-radius:999px;
+  background:#ffd45f;
+  font-size:9px;
+  font-weight:900;
+  line-height:1;
+}
+
+.group-season-badge[hidden] {
+  display:none;
+}
+
+.card.archived-sprite {
+  border-color:rgba(255,212,95,.72);
+  box-shadow:0 0 0 2px rgba(255,212,95,.1),0 8px 18px rgba(0,0,0,.2);
+}
+
+.sprite-season-badge {
+  position:absolute;
+  z-index:7;
+  top:7px;
+  left:7px;
+  padding:4px 7px;
+  color:#fff;
+  border:1px solid rgba(255,255,255,.25);
+  border-radius:999px;
+  background:rgba(8,10,20,.82);
+  font-size:8px;
+  font-weight:900;
+  line-height:1;
+  pointer-events:none;
+  -webkit-backdrop-filter:blur(7px);
+  backdrop-filter:blur(7px);
+}
+
+.sprite-season-badge[hidden] {
+  display:none;
+}
+
+.season-vault-empty {
+  border:1px solid rgba(255,212,95,.28);
+}
+
+.showcase-filters {
+  grid-template-columns:repeat(4,minmax(0,1fr));
+}
+
+@media (max-width:760px) {
+  .showcase-filters {
+    grid-template-columns:1fr 1fr;
+  }
+}
+
+@media (max-width:480px) {
+  .season-vault-bar {
+    grid-template-columns:minmax(0,1fr) auto;
+  }
+
+  .season-vault-bar label {
+    grid-column:1 / -1;
+  }
+
+  .season-vault-bar span {
+    font-size:10px;
+  }
+
+  .showcase-filters {
+    grid-template-columns:1fr;
   }
 }

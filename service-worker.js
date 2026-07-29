@@ -1,14 +1,17 @@
-const CACHE = 'galaxy-sprite-checklist-v77';
+const CACHE = 'galaxy-sprite-checklist-v79';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=77',
+  './styles.css?v=79',
   './published-design.js',
   './art-config.js?v=67',
-  './data.js?v=77',
-  './app.js?v=77',
+  './data.js?v=79',
+  './app.js?v=79',
   './manifest.webmanifest?v=67',
   './fonts/Burbank Big Condensed Black.otf',
+  './fonts/Fredoka-Regular.woff2',
+  './fonts/Fredoka-SemiBold.woff2',
+  './fonts/Fredoka-Bold.woff2',
   './apple-touch-icon.png?v=67',
   './favicon.ico?v=67',
   './icons/app-icon-180-v67.png',

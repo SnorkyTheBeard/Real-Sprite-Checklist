@@ -389,7 +389,6 @@
   const showcasePreviewWrap = document.getElementById('showcasePreviewWrap');
   const showcasePreview = document.getElementById('showcasePreview');
   const generateShowcaseBtn = document.getElementById('generateShowcaseBtn');
-  const downloadShowcaseBtn = document.getElementById('downloadShowcaseBtn');
   const shareShowcaseBtn = document.getElementById('shareShowcaseBtn');
   const backupBtn = document.getElementById('backupBtn');
   const backupDialog = document.getElementById('backupDialog');
@@ -2297,7 +2296,7 @@
     showcaseFile = null;
     showcasePreview.removeAttribute('src');
     showcasePreviewWrap.hidden = true;
-    downloadShowcaseBtn.hidden = true;
+    generateShowcaseBtn.hidden = false;
     shareShowcaseBtn.hidden = true;
   }
 
@@ -2540,7 +2539,7 @@
     if (sprite) drawImageContain(context,sprite,wellX,wellY,wellWidth,wellHeight,compact ? 8 : 13);
     else {
       context.fillStyle = 'rgba(255,255,255,.62)';
-      context.font = `600 ${compact ? 14 : 18}px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif`;
+      context.font = `600 ${compact ? 14 : 18}px "Fredoka","Avenir Next Rounded","Segoe UI",sans-serif`;
       context.textAlign = 'center';
       context.fillText('Image unavailable',wellX + wellWidth / 2,wellY + wellHeight / 2);
     }
@@ -2549,10 +2548,10 @@
 
     context.textAlign = 'left';
     context.fillStyle = '#fff';
-    context.font = `${compact ? 23 : 30}px "Sprite Display","Arial Black",sans-serif`;
+    context.font = `700 ${compact ? 20 : 27}px "Fredoka","Avenir Next Rounded","Segoe UI",sans-serif`;
     context.fillText(fitCanvasText(context,entry.groupName,width - padding * 2),x + padding,groupY);
     context.fillStyle = '#d3d4dd';
-    context.font = `600 ${compact ? 13 : 17}px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif`;
+    context.font = `600 ${compact ? 13 : 17}px "Fredoka","Avenir Next Rounded","Segoe UI",sans-serif`;
     context.fillText(fitCanvasText(context,entry.variantName,width - padding * 2),x + padding,variantY);
 
     const badgeHeight = compact ? 23 : 28;
@@ -2566,13 +2565,13 @@
     context.fillText(entry.rarity,x + padding + badgeWidth / 2,badgeY + badgeHeight * .7);
     if (entry.rarityPercentage) {
       context.fillStyle = '#fff';
-      context.font = `700 ${compact ? 11 : 14}px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif`;
+      context.font = `700 ${compact ? 11 : 14}px "Fredoka","Avenir Next Rounded","Segoe UI",sans-serif`;
       context.textAlign = 'right';
       context.fillText(entry.rarityPercentage,x + width - padding,badgeY + badgeHeight * .7);
     }
     if (entry.mastered) {
       context.fillStyle = '#f2d77c';
-      context.font = `700 ${compact ? 18 : 22}px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif`;
+      context.font = `700 ${compact ? 18 : 22}px "Fredoka","Avenir Next Rounded","Segoe UI",sans-serif`;
       context.textAlign = 'right';
       context.fillText('★',x + width - padding,wellY + (compact ? 21 : 26));
     }
@@ -2581,7 +2580,7 @@
       const previousHeight = compact ? 20 : 24;
       fillRounded(context,wellX,wellY,previousWidth,previousHeight,previousHeight / 2,'rgba(22,23,29,.82)');
       context.fillStyle = '#e1e2e8';
-      context.font = `700 ${compact ? 8 : 11}px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif`;
+      context.font = `700 ${compact ? 8 : 11}px "Fredoka","Avenir Next Rounded","Segoe UI",sans-serif`;
       context.textAlign = 'center';
       context.fillText('PREVIOUS',wellX + previousWidth / 2,wellY + previousHeight * .7);
     }
@@ -2651,7 +2650,7 @@
       context.fillText('My Sprite Tracker',width / 2,91);
       context.shadowBlur = 0;
 
-      context.font = '700 22px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif';
+      context.font = '700 22px "Fredoka","Avenir Next Rounded","Segoe UI",sans-serif';
       const subtitle = selectionLabel.toUpperCase();
       const subtitleWidth = Math.min(width - 180,context.measureText(subtitle).width + 72);
       fillRounded(context,(width - subtitleWidth) / 2,119,subtitleWidth,46,23,'rgba(8,10,20,.72)');
@@ -2663,7 +2662,7 @@
       context.fillText(subtitle,width / 2,150);
       if (SEASON_FEATURE_VISIBLE && selection.season !== CURRENT_SEASON_ID) {
         context.fillStyle = '#c6ccda';
-        context.font = '700 15px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif';
+        context.font = '700 15px "Fredoka","Avenir Next Rounded","Segoe UI",sans-serif';
         context.fillText(seasonViewLabel(selection.season).toUpperCase(),width / 2,190);
       }
 
@@ -2689,12 +2688,12 @@
       const link = 'snorkythebeard.github.io/Real-Sprite-Checklist';
       context.textAlign = 'center';
       context.fillStyle = '#e8e7ec';
-      context.font = '600 16px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif';
+      context.font = '600 16px "Fredoka","Avenir Next Rounded","Segoe UI",sans-serif';
       context.fillText(link,width / 2,footerCenterY - 22);
 
       const disclaimer = document.querySelector('.fan-content-disclaimer')?.textContent?.trim() || '';
       context.fillStyle = '#aaa9b2';
-      context.font = '500 11px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif';
+      context.font = '500 11px "Fredoka","Avenir Next Rounded","Segoe UI",sans-serif';
       const lines = wrappedCanvasLines(context,disclaimer,width - 190,3);
       const disclaimerStartY = footerCenterY + 9;
       lines.forEach((line,index) => context.fillText(line,width / 2,disclaimerStartY + index * 16));
@@ -2740,7 +2739,7 @@
       showcaseObjectUrl = URL.createObjectURL(showcaseFile);
       showcasePreview.src = showcaseObjectUrl;
       showcasePreviewWrap.hidden = false;
-      downloadShowcaseBtn.hidden = false;
+      generateShowcaseBtn.hidden = true;
       let canShare = false;
       try { canShare = Boolean(navigator.share && navigator.canShare?.({ files:[showcaseFile] })); } catch { canShare = false; }
       shareShowcaseBtn.hidden = !canShare;
@@ -2755,12 +2754,6 @@
     }
   }
 
-  function downloadShowcaseImage() {
-    if (!showcaseFile) return;
-    downloadableFile(showcaseFile,showcaseFile.name);
-    showToast('Collection image downloaded');
-  }
-
   async function shareShowcaseImage() {
     if (!showcaseFile || !navigator.share) return;
     try {
@@ -2770,7 +2763,7 @@
         files:[showcaseFile]
       });
     } catch (error) {
-      if (error?.name !== 'AbortError') showToast('Sharing is not available here. Download the image instead.');
+      if (error?.name !== 'AbortError') showToast('Sharing is not available in this browser.');
     }
   }
 
@@ -2817,7 +2810,6 @@
     });
   });
   document.getElementById('closeShowcaseBtn').addEventListener('click',() => showcaseDialog.close());
-  downloadShowcaseBtn.addEventListener('click',downloadShowcaseImage);
   shareShowcaseBtn.addEventListener('click',shareShowcaseImage);
   showcaseDialog.addEventListener('close',clearShowcaseFile);
   backupBtn.addEventListener('click',openBackupDialog);
@@ -2947,6 +2939,6 @@
   const activeHash = `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js?v=77',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js?v=79',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
   }
 })();

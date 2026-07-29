@@ -6,16 +6,40 @@
   font-display:swap;
 }
 
+@font-face {
+  font-family:"Fredoka";
+  src:url("fonts/Fredoka-Regular.woff2") format("woff2");
+  font-style:normal;
+  font-weight:400;
+  font-display:swap;
+}
+
+@font-face {
+  font-family:"Fredoka";
+  src:url("fonts/Fredoka-SemiBold.woff2") format("woff2");
+  font-style:normal;
+  font-weight:600;
+  font-display:swap;
+}
+
+@font-face {
+  font-family:"Fredoka";
+  src:url("fonts/Fredoka-Bold.woff2") format("woff2");
+  font-style:normal;
+  font-weight:700 900;
+  font-display:swap;
+}
+
 :root {
   color-scheme:dark;
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bottom:env(safe-area-inset-bottom,0px);
-  --font-body:"Avenir Next Rounded","Avenir Next","Segoe UI",Arial,sans-serif;
+  --font-body:"Fredoka","Avenir Next Rounded","Segoe UI",Arial,sans-serif;
   --font-heading:"Sprite Display","Arial Black",Impact,sans-serif;
-  --font-button:"Avenir Next Rounded","Avenir Next","Segoe UI",Arial,sans-serif;
+  --font-button:"Fredoka","Avenir Next Rounded","Segoe UI",Arial,sans-serif;
   --font-summary:var(--font-body);
   --theme-text:#fffaf2;
-  --theme-muted:#dce1ee;
+  --theme-muted:#dce7f5;
   --theme-body-bg:#050505;
   --theme-body-image:none;
   --theme-body-size:cover;
@@ -530,12 +554,12 @@ footer {
 }
 /* Clean local typography: Fortnite-style display type with readable UI text. */
 :root {
-  --font-body:"Avenir Next Rounded","Avenir Next","Segoe UI",Arial,sans-serif !important;
+  --font-body:"Fredoka","Avenir Next Rounded","Segoe UI",Arial,sans-serif !important;
   --font-heading:"Sprite Display","Arial Black",Impact,sans-serif !important;
-  --font-button:"Avenir Next Rounded","Avenir Next","Segoe UI",Arial,sans-serif !important;
-  --font-summary:"Avenir Next Rounded","Avenir Next","Segoe UI",Arial,sans-serif !important;
+  --font-button:"Fredoka","Avenir Next Rounded","Segoe UI",Arial,sans-serif !important;
+  --font-summary:"Fredoka","Avenir Next Rounded","Segoe UI",Arial,sans-serif !important;
   --theme-text:#fffaf2 !important;
-  --theme-muted:#dce1ee !important;
+  --theme-muted:#dce7f5 !important;
 }
 
 body,
@@ -544,6 +568,7 @@ select,
 textarea,
 .summary-box {
   font-family:var(--font-body) !important;
+  letter-spacing:.006em;
 }
 
 button {
@@ -565,7 +590,7 @@ h4,
   letter-spacing:.015em;
   text-shadow:
     0 2px 0 rgba(3,5,15,.95),
-    0 0 15px var(--rarity-haze),
+    0 0 18px var(--rarity-haze),
     0 8px 20px rgba(0,0,0,.48);
 }
 
@@ -573,6 +598,27 @@ h4,
 .sprite-variant-line h4 {
   color:#fffdf7;
   letter-spacing:.025em;
+  text-shadow:
+    0 2px 0 rgba(3,5,15,.92),
+    0 0 12px var(--rarity-haze),
+    0 5px 14px rgba(0,0,0,.52);
+}
+
+.card h4,
+.summary strong,
+.collection-count,
+.page-count {
+  text-shadow:
+    0 1px 0 rgba(0,0,0,.98),
+    0 3px 8px rgba(0,0,0,.62);
+}
+
+.page-head p:not(.page-eyebrow),
+.row-hint,
+.master-label,
+.page-swipe-hint,
+footer {
+  color:#dce7f5 !important;
 }
 
 .tab,
@@ -1291,7 +1337,7 @@ body.unowned-page .sprite-editor-toggle {
 .showcase-dialog select,
 .backup-dialog input,
 .backup-file-button {
-  font-family:"UserCustomFont","Trebuchet MS",sans-serif !important;
+  font-family:var(--font-body) !important;
 }
 
 .showcase-filters {
@@ -1366,7 +1412,7 @@ body.unowned-page .sprite-editor-toggle {
 }
 
 .showcase-actions {
-  grid-template-columns:repeat(4,minmax(0,1fr));
+  grid-template-columns:repeat(2,minmax(0,1fr));
 }
 
 .showcase-dialog .primary-btn,
@@ -1483,7 +1529,7 @@ body.unowned-page .sprite-editor-toggle {
   border-radius:11px;
   outline:none;
   background:#252552;
-  font-family:"UserCustomFont","Trebuchet MS",sans-serif !important;
+  font-family:var(--font-body) !important;
   font-size:14px;
   font-weight:800;
 }

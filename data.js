@@ -1,3 +1,8 @@
+window.SPRITE_SEASONS = [
+  { id:"chapter-7-season-3", label:"Chapter 7 Season 3" }
+];
+window.CURRENT_SPRITE_SEASON = "chapter-7-season-3";
+
 window.SPRITE_DATA = [
   {
     "rarity": "Rare",

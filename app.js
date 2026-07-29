@@ -7,6 +7,16 @@
   const pageTabs = [...rarities,UNOWNED_PAGE];
   const defaultRarity = 'Rare';
   const hasOwn = (object,key) => Object.prototype.hasOwnProperty.call(object || {},key);
+  const seasonCatalog = Array.isArray(window.SPRITE_SEASONS) && window.SPRITE_SEASONS.length
+    ? window.SPRITE_SEASONS
+        .filter((season) => season?.id && season?.label)
+        .map((season) => ({ id:String(season.id), label:String(season.label) }))
+    : [{ id:'chapter-7-season-3', label:'Chapter 7 Season 3' }];
+  const CURRENT_SEASON_ID = seasonCatalog.some((season) => season.id === window.CURRENT_SPRITE_SEASON)
+    ? window.CURRENT_SPRITE_SEASON
+    : seasonCatalog[0].id;
+  const SEASON_FEATURE_VISIBLE = false;
+  const SEASON_VIEW_ALL = 'all';
 
   function appStorageScope() {
     const firstPathPart = decodeURIComponent(location.pathname.split('/').filter(Boolean)[0] || 'root');
@@ -23,13 +33,13 @@
   const BACKUP_FORMAT = 'my-sprite-tracker-backup';
   const BACKUP_VERSION = 1;
   const MAX_BACKUP_BYTES = 2 * 1024 * 1024;
-  const SEASON_VIEWS = ['current','previous','all'];
+  const SEASON_VIEWS = [...seasonCatalog.map((season) => season.id),SEASON_VIEW_ALL];
   const CARD_REORDER_MIME = 'application/x-sprite-card';
   const GITHUB_TOKEN_SESSION_KEY = `galaxy_sprite_tracker_github_token_${STORAGE_SCOPE}`;
   const GITHUB_API_VERSION = '2026-03-10';
   const GITHUB_PUBLISH_TARGET = {
     owner:'SnorkyTheBeard',
-    repo:'Sprite-Checklist-Clean',
+    repo:'Real-Sprite-Checklist',
     branch:'main'
   };
 
@@ -90,9 +100,11 @@
   function loadSeasonView() {
     try {
       const saved = localStorage.getItem(SEASON_VIEW_KEY);
-      return SEASON_VIEWS.includes(saved) ? saved : 'current';
+      if (!SEASON_FEATURE_VISIBLE) return CURRENT_SEASON_ID;
+      if (saved === 'current' || saved === 'previous') return CURRENT_SEASON_ID;
+      return SEASON_VIEWS.includes(saved) ? saved : CURRENT_SEASON_ID;
     } catch {
-      return 'current';
+      return CURRENT_SEASON_ID;
     }
   }
 
@@ -420,15 +432,35 @@
   }
 
   function applySeasonViewControls() {
+    const syncOptions = (select,includeAll = true) => {
+      const wanted = [
+        ...seasonCatalog.map((season) => ({ value:season.id, label:season.label })),
+        ...(includeAll ? [{ value:SEASON_VIEW_ALL, label:'All Seasons' }] : [])
+      ];
+      const current = [...select.options].map((option) => `${option.value}:${option.textContent}`).join('|');
+      const next = wanted.map((option) => `${option.value}:${option.label}`).join('|');
+      if (current !== next) {
+        select.replaceChildren(...wanted.map((option) => {
+          const element = document.createElement('option');
+          element.value = option.value;
+          element.textContent = option.label;
+          return element;
+        }));
+      }
+    };
+    syncOptions(seasonViewSelect);
+    syncOptions(showcaseSeasonSelect);
+    document.querySelector('.season-vault-bar').hidden = !SEASON_FEATURE_VISIBLE;
+    document.querySelector('.showcase-season-filter').hidden = !SEASON_FEATURE_VISIBLE;
     seasonViewSelect.value = seasonView;
-    seasonVaultCount.textContent = `${vaultedSpriteCount()} vaulted`;
-    document.body.classList.toggle('previous-season-view',seasonView === 'previous');
-    document.body.classList.toggle('all-seasons-view',seasonView === 'all');
+    seasonVaultCount.textContent = `${vaultedSpriteCount()} outside current season`;
+    document.body.classList.toggle('previous-season-view',seasonView !== CURRENT_SEASON_ID && seasonView !== SEASON_VIEW_ALL);
+    document.body.classList.toggle('all-seasons-view',seasonView === SEASON_VIEW_ALL);
     document.body.dataset.seasonView = seasonView;
   }
 
   function setSeasonView(mode,{ announce = true } = {}) {
-    const next = SEASON_VIEWS.includes(mode) ? mode : 'current';
+    const next = sanitizeSeasonView(mode);
     const changed = seasonView !== next;
     seasonView = next;
     try { localStorage.setItem(SEASON_VIEW_KEY,seasonView); } catch { /* The view can remain active for this visit. */ }
@@ -493,11 +525,16 @@
   function familyView(family) {
     const custom = design.families[family.id] || {};
     const cardEdits = spriteCardEdits.families?.[family.id] || {};
+    const savedSeason = hasOwn(cardEdits,'seasonId') ? cardEdits.seasonId : (custom.seasonId || family.seasonId);
+    const seasonId = SEASON_VIEWS.includes(savedSeason) && savedSeason !== SEASON_VIEW_ALL
+      ? savedSeason
+      : CURRENT_SEASON_ID;
     return {
       name:hasOwn(custom,'name') ? custom.name : family.name,
       visible:hasOwn(custom,'visible') ? Boolean(custom.visible) : true,
       deleted:Boolean(custom.deleted),
-      archived:hasOwn(cardEdits,'archivedGroup') ? Boolean(cardEdits.archivedGroup) : Boolean(custom.archived),
+      seasonId,
+      archived:seasonId !== CURRENT_SEASON_ID,
       customBg:Boolean(custom.customBg),
       bgColor:custom.bgColor || design.theme.collectionBgColor,
       bgImage:hasOwn(custom,'bgImage') ? custom.bgImage : '',
@@ -514,7 +551,12 @@
       rarityPercentage:hasOwn(cardEdits.percentages,variant.id) ? cardEdits.percentages[variant.id] : String(custom.rarityPercentage || ''),
       visible:hasOwn(custom,'visible') ? Boolean(custom.visible) : true,
       deleted:Boolean(custom.deleted) || (Array.isArray(cardEdits.deleted) && cardEdits.deleted.includes(variant.id)),
-      archived:hasOwn(cardEdits.archived,variant.id) ? Boolean(cardEdits.archived[variant.id]) : Boolean(custom.archived),
+      seasonId:SEASON_VIEWS.includes(cardEdits.seasons?.[variant.id])
+        ? cardEdits.seasons[variant.id]
+        : (SEASON_VIEWS.includes(custom.seasonId)
+          ? custom.seasonId
+          : (SEASON_VIEWS.includes(variant.seasonId) ? variant.seasonId : '')),
+      archived:false,
       customCard:Boolean(custom.customCard),
       cardColor:custom.cardColor || design.theme.cardBgColor,
       cardImage:hasOwn(custom,'cardImage') ? custom.cardImage : '',
@@ -555,15 +597,17 @@
   }
 
   function isPreviousSeasonSprite(family,variant) {
-    return Boolean(familyView(family).archived || variantView(family,variant).archived);
+    return spriteSeasonId(family,variant) !== CURRENT_SEASON_ID;
+  }
+
+  function spriteSeasonId(family,variant) {
+    return variantView(family,variant).seasonId || familyView(family).seasonId || CURRENT_SEASON_ID;
   }
 
   function variantsForSeason(family,mode = seasonView) {
     return visibleVariants(family).filter((variant) => {
-      const archived = isPreviousSeasonSprite(family,variant);
-      if (mode === 'previous') return archived;
-      if (mode === 'all') return true;
-      return !archived;
+      if (mode === SEASON_VIEW_ALL) return true;
+      return spriteSeasonId(family,variant) === mode;
     });
   }
 
@@ -582,11 +626,8 @@
   }
 
   function seasonViewLabel(mode = seasonView) {
-    return {
-      current:'Current Season',
-      previous:'Previous Seasons',
-      all:'All Seasons'
-    }[mode] || 'Current Season';
+    if (mode === SEASON_VIEW_ALL) return 'All Seasons';
+    return seasonCatalog.find((season) => season.id === mode)?.label || seasonCatalog[0].label;
   }
 
   function saveCardEditOrRestore(previousEdits) {
@@ -633,6 +674,7 @@
       id,
       name,
       rarity:activeRarity,
+      seasonId:CURRENT_SEASON_ID,
       variants:[{ id:'base', name:'Base', image:'' }]
     });
     familyCardEdits(id).order = ['base'];
@@ -659,29 +701,6 @@
     edits.order = [...currentOrder,id];
     if (!saveCardEditOrRestore(previousEdits)) return null;
     return id;
-  }
-
-  function setSpriteArchived(family,variant,archived) {
-    const view = variantView(family,variant);
-    const destination = archived ? 'Previous Seasons' : 'the Current Season';
-    if (!window.confirm(`${archived ? 'Move' : 'Return'} the ${view.name || 'selected'} sprite card to ${destination}? Its collection progress and artwork will be kept.`)) return;
-    const previousEdits = cloneJson(spriteCardEdits);
-    const edits = familyCardEdits(family.id);
-    edits.archived[variant.id] = Boolean(archived);
-    if (!saveCardEditOrRestore(previousEdits)) return;
-    renderAll();
-    showToast(archived ? 'Sprite moved to Previous Seasons' : 'Sprite returned to Current Season');
-  }
-
-  function setSpriteGroupArchived(family,archived) {
-    const groupName = familyView(family).name || 'this Sprite group';
-    const destination = archived ? 'Previous Seasons' : 'the Current Season';
-    if (!window.confirm(`${archived ? 'Move' : 'Return'} ${groupName} to ${destination}? Every card, image, and progress choice will be kept.`)) return;
-    const previousEdits = cloneJson(spriteCardEdits);
-    familyCardEdits(family.id).archivedGroup = Boolean(archived);
-    if (!saveCardEditOrRestore(previousEdits)) return;
-    renderAll();
-    showToast(archived ? `${groupName} moved to Previous Seasons` : `${groupName} returned to Current Season`);
   }
 
   function saveVariantOrder(family,order,message = 'Sprite cards moved') {
@@ -965,6 +984,8 @@
 
   function buildPublishedSpriteDesign(basePublishedDesign) {
     const nextDesign = cloneJson(basePublishedDesign);
+    nextDesign.seasons = cloneJson(seasonCatalog);
+    nextDesign.currentSeasonId = CURRENT_SEASON_ID;
     nextDesign.families ||= {};
     nextDesign.customFamilies = Array.isArray(nextDesign.customFamilies) ? nextDesign.customFamilies : [];
     const assets = [];
@@ -976,6 +997,7 @@
         id:localFamily.id,
         name:localFamily.name || 'New sprite group',
         rarity:rarities.includes(localFamily.rarity) ? localFamily.rarity : defaultRarity,
+        seasonId:SEASON_VIEWS.includes(localFamily.seasonId) ? localFamily.seasonId : CURRENT_SEASON_ID,
         variants:Array.isArray(localFamily.variants) && localFamily.variants.length
           ? cloneJson(localFamily.variants)
           : [{ id:'base', name:'Base', image:'' }]
@@ -985,6 +1007,7 @@
       const familyDesign = nextDesign.families[localFamily.id] ||= {};
       familyDesign.name = familyRecord.name;
       familyDesign.rarity = familyRecord.rarity;
+      familyDesign.seasonId = familyRecord.seasonId;
       familyDesign.visible = true;
       familyDesign.deleted = false;
       familyDesign.variants ||= {};
@@ -1233,6 +1256,8 @@
 
     applyImageSurface(root,'body',theme.bodyBgImage,theme.bodyBgMode);
     const themeRarity = activeThemeRarity();
+    document.body.dataset.rarity = themeRarity.toLowerCase();
+    document.body.dataset.page = activeRarity.toLowerCase();
     const pageHeader = theme.pageHeaderBackgrounds?.[themeRarity] || {};
     const usePageHeader = Boolean(pageHeader.enabled && pageHeader.image);
     applyImageSurface(root,'header',usePageHeader ? pageHeader.image : theme.headerBgImage,usePageHeader ? pageHeader.mode : theme.headerBgMode);
@@ -1373,8 +1398,8 @@
     crown.innerHTML = crownSvg();
     const seasonBadge = document.createElement('span');
     seasonBadge.className = 'sprite-season-badge';
-    seasonBadge.textContent = 'Previous';
-    seasonBadge.hidden = !previousSeason;
+    seasonBadge.textContent = seasonViewLabel(spriteSeasonId(family,variant));
+    seasonBadge.hidden = !SEASON_FEATURE_VISIBLE || !previousSeason;
 
     const imageWrap = document.createElement('div');
     imageWrap.className = 'image-wrap';
@@ -1442,21 +1467,7 @@
     moveRight.textContent = listView ? '↓' : '→';
     moveRight.disabled = rowIndex < 0 || rowIndex === rowVariants.length - 1;
     moveRight.setAttribute('aria-label',`Move ${view.name || 'sprite'} ${listView ? 'down' : 'right'}`);
-    const archiveButton = document.createElement('button');
-    archiveButton.type = 'button';
-    archiveButton.className = 'sprite-archive-button';
-    archiveButton.textContent = previousSeason ? '↩' : '⇩';
-    archiveButton.title = familyInfo.archived
-      ? 'Return the whole group from its header'
-      : (previousSeason ? 'Return to Current Season' : 'Move to Previous Seasons');
-    archiveButton.disabled = familyInfo.archived;
-    archiveButton.setAttribute(
-      'aria-label',
-      familyInfo.archived
-        ? `${view.name || 'Sprite'} is part of an archived group`
-        : `${previousSeason ? 'Return' : 'Move'} ${view.name || 'sprite'} ${previousSeason ? 'to Current Season' : 'to Previous Seasons'}`
-    );
-    editorTools.append(moveLeft,moveHandle,moveRight,archiveButton);
+    editorTools.append(moveLeft,moveHandle,moveRight);
 
     const percentageEditor = document.createElement('label');
     percentageEditor.className = 'sprite-percentage-editor';
@@ -1529,7 +1540,6 @@
     });
     moveLeft.addEventListener('click',() => moveSpriteCard(family,variant.id,-1));
     moveRight.addEventListener('click',() => moveSpriteCard(family,variant.id,1));
-    archiveButton.addEventListener('click',() => setSpriteArchived(family,variant,!previousSeason));
     percentageInput.addEventListener('change',() => {
       if (!saveRarityPercentage(family,variant,percentageInput.value)) {
         percentageInput.value = String(view.rarityPercentage || '').replace(/%$/,'');
@@ -1736,8 +1746,8 @@
       title.hidden = !group.name;
       const groupSeasonBadge = document.createElement('span');
       groupSeasonBadge.className = 'group-season-badge';
-      groupSeasonBadge.textContent = 'Previous season';
-      groupSeasonBadge.hidden = !group.archived;
+      groupSeasonBadge.textContent = seasonViewLabel(group.seasonId);
+      groupSeasonBadge.hidden = !SEASON_FEATURE_VISIBLE || !group.archived;
       titleWrap.append(title,groupSeasonBadge);
       const meta = document.createElement('div');
       const progressCounts = document.createElement('div');
@@ -1746,7 +1756,6 @@
       const hint = document.createElement('span');
       const headerActions = document.createElement('div');
       const addButton = document.createElement('button');
-      const archiveGroupButton = document.createElement('button');
       meta.className = 'collection-meta';
       progressCounts.className = 'collection-progress-counts';
       progressCounts.setAttribute('aria-label',`${group.name || 'Sprite'} progress`);
@@ -1763,17 +1772,9 @@
       addButton.type = 'button';
       addButton.className = 'add-sprite-button';
       addButton.textContent = '+ Add sprite';
-      addButton.hidden = seasonView !== 'current';
+      addButton.hidden = seasonView !== CURRENT_SEASON_ID;
       addButton.addEventListener('click',() => openAddSpriteDialog(family.id));
-      archiveGroupButton.type = 'button';
-      archiveGroupButton.className = 'archive-sprite-group-button';
-      archiveGroupButton.textContent = group.archived ? 'Return group' : 'Vault group';
-      archiveGroupButton.setAttribute(
-        'aria-label',
-        `${group.archived ? 'Return' : 'Move'} ${group.name || 'Sprite group'} ${group.archived ? 'to Current Season' : 'to Previous Seasons'}`
-      );
-      archiveGroupButton.addEventListener('click',() => setSpriteGroupArchived(family,!group.archived));
-      headerActions.append(meta,addButton,archiveGroupButton);
+      headerActions.append(meta,addButton);
       header.append(titleWrap,headerActions);
 
       const row = document.createElement('div');
@@ -1795,15 +1796,15 @@
       collectionsEl.appendChild(section);
     });
 
-    if (!collectionsEl.childElementCount && seasonView === 'previous' && unownedPage) {
+    if (!collectionsEl.childElementCount && seasonView !== CURRENT_SEASON_ID && seasonView !== SEASON_VIEW_ALL && unownedPage) {
       const empty = document.createElement('p');
       empty.className = 'empty-sprite-row unowned-empty season-vault-empty';
-      empty.textContent = 'You own every Sprite currently in the Season Vault!';
+      empty.textContent = `You own every Sprite from ${seasonViewLabel()}!`;
       collectionsEl.appendChild(empty);
-    } else if (!collectionsEl.childElementCount && seasonView === 'previous') {
+    } else if (!collectionsEl.childElementCount && seasonView !== CURRENT_SEASON_ID && seasonView !== SEASON_VIEW_ALL) {
       const empty = document.createElement('p');
       empty.className = 'empty-sprite-row unowned-empty season-vault-empty';
-      empty.textContent = 'Nothing from this rarity is in the Season Vault yet.';
+      empty.textContent = `Nothing from this rarity is listed for ${seasonViewLabel()} yet.`;
       collectionsEl.appendChild(empty);
     } else if (unownedPage && !collectionsEl.childElementCount) {
       const empty = document.createElement('p');
@@ -1892,15 +1893,16 @@
         if (view.deleted || !view.visible) return [];
         const groupName = group.name || 'Unnamed sprite';
         const variantName = view.name || 'Unnamed variant';
-        const archived = isPreviousSeasonSprite(family,variant);
+        const seasonId = spriteSeasonId(family,variant);
         return [{
           familyId:family.id,
           variantId:variant.id,
           rarity,
           groupName,
           variantName,
-          archived,
-          searchText:normalizeSearchText(`${groupName} ${variantName} ${rarity} ${archived ? 'previous season vault archived' : 'current season'}`)
+          seasonId,
+          archived:seasonId !== CURRENT_SEASON_ID,
+          searchText:normalizeSearchText(`${groupName} ${variantName} ${rarity}`)
         }];
       });
     });
@@ -1934,8 +1936,7 @@
   function openSpriteSearchResult(entry) {
     closeSpriteSearchResults();
     spriteSearchInput.blur();
-    if (entry.archived && seasonView === 'current') setSeasonView('previous',{ announce:false });
-    else if (!entry.archived && seasonView === 'previous') setSeasonView('current',{ announce:false });
+    if (SEASON_FEATURE_VISIBLE && entry.seasonId !== seasonView) setSeasonView(entry.seasonId,{ announce:false });
     switchRarity(entry.rarity,{ historyMode:'push' });
     requestAnimationFrame(() => {
       const card = [...document.querySelectorAll('.card')].find((item) => item.dataset.familyId === entry.familyId && item.dataset.variantId === entry.variantId);
@@ -1973,7 +1974,7 @@
         button.className = 'sprite-search-result';
         button.setAttribute('role','option');
         title.textContent = `${entry.groupName} — ${entry.variantName}`;
-        detail.textContent = `${entry.rarity} sprite · ${entry.archived ? 'Previous Seasons' : 'Current Season'}`;
+        detail.textContent = `${entry.rarity} sprite`;
         status.className = 'sprite-search-result-status';
         status.textContent = spriteSearchState(entry);
         text.append(title,detail);
@@ -2049,7 +2050,9 @@
   }
 
   function sanitizeSeasonView(value) {
-    return SEASON_VIEWS.includes(value) ? value : 'current';
+    if (!SEASON_FEATURE_VISIBLE) return CURRENT_SEASON_ID;
+    if (value === 'current' || value === 'previous') return CURRENT_SEASON_ID;
+    return SEASON_VIEWS.includes(value) ? value : CURRENT_SEASON_ID;
   }
 
   function progressSnapshotStats(progress) {
@@ -2302,7 +2305,7 @@
     clearShowcaseFile();
     showcaseStatusSelect.value = isUnownedPage() ? 'unowned' : 'collected';
     showcaseRaritySelect.value = rarities.includes(activeRarity) ? activeRarity : 'all';
-    showcaseSeasonSelect.value = seasonView;
+    showcaseSeasonSelect.value = CURRENT_SEASON_ID;
     showcaseSortSelect.value = 'app';
     showcaseStatusMessage.textContent = '';
     showcaseStatusMessage.dataset.state = '';
@@ -2441,24 +2444,69 @@
   }
 
   function drawShowcaseBackground(context,width,height) {
-    const gradient = context.createLinearGradient(0,0,width,height);
-    gradient.addColorStop(0,'#31323a');
-    gradient.addColorStop(.52,'#403d46');
-    gradient.addColorStop(1,'#353740');
-    context.fillStyle = gradient;
+    context.fillStyle = '#020207';
     context.fillRect(0,0,width,height);
 
-    const bubbleCount = Math.min(24,Math.max(12,Math.ceil(height / 500) * 3));
-    for (let index = 0; index < bubbleCount; index += 1) {
-      const x = (index * 317 + 107) % width;
-      const y = (index * 463 + 163) % height;
-      const radius = 38 + (index % 5) * 18;
-      context.globalAlpha = .035 + (index % 3) * .012;
-      context.fillStyle = index % 2 ? '#d9d2e5' : '#c9dde0';
+    const smoke = [
+      { x:.14, y:.08, radius:.46, color:'rgba(96,174,255,.30)' },
+      { x:.87, y:.19, radius:.42, color:'rgba(190,111,255,.27)' },
+      { x:.22, y:.50, radius:.44, color:'rgba(255,112,207,.18)' },
+      { x:.82, y:.67, radius:.48, color:'rgba(91,224,255,.22)' },
+      { x:.44, y:.92, radius:.50, color:'rgba(255,208,113,.15)' }
+    ];
+    smoke.forEach((cloud) => {
+      const x = width * cloud.x;
+      const y = height * cloud.y;
+      const radius = width * cloud.radius;
+      const glow = context.createRadialGradient(x,y,0,x,y,radius);
+      glow.addColorStop(0,cloud.color);
+      glow.addColorStop(.42,cloud.color.replace(/,\.[0-9]+\)/,',.10)'));
+      glow.addColorStop(1,'rgba(0,0,0,0)');
+      context.fillStyle = glow;
+      context.fillRect(0,Math.max(0,y - radius),width,Math.min(height,y + radius) - Math.max(0,y - radius));
+    });
+
+    const sheen = context.createLinearGradient(0,0,width,height);
+    sheen.addColorStop(0,'rgba(255,255,255,.055)');
+    sheen.addColorStop(.20,'rgba(255,255,255,0)');
+    sheen.addColorStop(.75,'rgba(255,255,255,0)');
+    sheen.addColorStop(1,'rgba(145,177,255,.045)');
+    context.fillStyle = sheen;
+    context.fillRect(0,0,width,height);
+
+    const starCount = Math.min(46,Math.max(20,Math.ceil(height / 360) * 3));
+    for (let index = 0; index < starCount; index += 1) {
+      const x = (index * 331 + 91) % width;
+      const y = (index * 487 + 127) % height;
+      const radius = index % 9 === 0 ? 2.3 : 1.1;
+      context.globalAlpha = index % 5 === 0 ? .7 : .34;
+      context.fillStyle = index % 3 === 0 ? '#c9edff' : '#fff';
       context.beginPath();
       context.arc(x,y,radius,0,Math.PI * 2);
       context.fill();
     }
+
+    [
+      [width * .08,height * .17,15],
+      [width * .91,height * .36,20],
+      [width * .12,height * .73,12],
+      [width * .86,height * .88,17]
+    ].forEach(([x,y,size]) => {
+      context.globalAlpha = .72;
+      context.strokeStyle = '#fff';
+      context.lineWidth = 1.4;
+      context.beginPath();
+      context.moveTo(x - size,y);
+      context.lineTo(x + size,y);
+      context.moveTo(x,y - size);
+      context.lineTo(x,y + size);
+      context.stroke();
+      context.globalAlpha = .26;
+      context.beginPath();
+      context.arc(x,y,size * .33,0,Math.PI * 2);
+      context.fillStyle = '#bfe8ff';
+      context.fill();
+    });
     context.globalAlpha = 1;
   }
 
@@ -2492,7 +2540,7 @@
     if (sprite) drawImageContain(context,sprite,wellX,wellY,wellWidth,wellHeight,compact ? 8 : 13);
     else {
       context.fillStyle = 'rgba(255,255,255,.62)';
-      context.font = `700 ${compact ? 15 : 19}px "UserCustomFont","Trebuchet MS",sans-serif`;
+      context.font = `600 ${compact ? 14 : 18}px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif`;
       context.textAlign = 'center';
       context.fillText('Image unavailable',wellX + wellWidth / 2,wellY + wellHeight / 2);
     }
@@ -2501,10 +2549,10 @@
 
     context.textAlign = 'left';
     context.fillStyle = '#fff';
-    context.font = `700 ${compact ? 17 : 23}px "UserCustomFont","Trebuchet MS",sans-serif`;
+    context.font = `${compact ? 23 : 30}px "Sprite Display","Arial Black",sans-serif`;
     context.fillText(fitCanvasText(context,entry.groupName,width - padding * 2),x + padding,groupY);
     context.fillStyle = '#d3d4dd';
-    context.font = `600 ${compact ? 14 : 18}px "UserCustomFont","Trebuchet MS",sans-serif`;
+    context.font = `600 ${compact ? 13 : 17}px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif`;
     context.fillText(fitCanvasText(context,entry.variantName,width - padding * 2),x + padding,variantY);
 
     const badgeHeight = compact ? 23 : 28;
@@ -2513,27 +2561,27 @@
     const color = rarityColor(entry.rarity);
     fillRounded(context,x + padding,badgeY,badgeWidth,badgeHeight,badgeHeight / 2,color);
     context.fillStyle = entry.rarity === 'Mythic' ? '#241900' : '#fff';
-    context.font = `700 ${compact ? 10 : 13}px "UserCustomFont","Trebuchet MS",sans-serif`;
+    context.font = `${compact ? 14 : 17}px "Sprite Display","Arial Black",sans-serif`;
     context.textAlign = 'center';
     context.fillText(entry.rarity,x + padding + badgeWidth / 2,badgeY + badgeHeight * .7);
     if (entry.rarityPercentage) {
       context.fillStyle = '#fff';
-      context.font = `700 ${compact ? 11 : 14}px "UserCustomFont","Trebuchet MS",sans-serif`;
+      context.font = `700 ${compact ? 11 : 14}px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif`;
       context.textAlign = 'right';
       context.fillText(entry.rarityPercentage,x + width - padding,badgeY + badgeHeight * .7);
     }
     if (entry.mastered) {
       context.fillStyle = '#f2d77c';
-      context.font = `700 ${compact ? 18 : 22}px "UserCustomFont","Trebuchet MS",sans-serif`;
+      context.font = `700 ${compact ? 18 : 22}px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif`;
       context.textAlign = 'right';
       context.fillText('★',x + width - padding,wellY + (compact ? 21 : 26));
     }
-    if (entry.previousSeason) {
+    if (SEASON_FEATURE_VISIBLE && entry.previousSeason) {
       const previousWidth = compact ? 68 : 88;
       const previousHeight = compact ? 20 : 24;
       fillRounded(context,wellX,wellY,previousWidth,previousHeight,previousHeight / 2,'rgba(22,23,29,.82)');
       context.fillStyle = '#e1e2e8';
-      context.font = `700 ${compact ? 8 : 11}px "UserCustomFont","Trebuchet MS",sans-serif`;
+      context.font = `700 ${compact ? 8 : 11}px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif`;
       context.textAlign = 'center';
       context.fillText('PREVIOUS',wellX + previousWidth / 2,wellY + previousHeight * .7);
     }
@@ -2564,7 +2612,7 @@
     const margin = columns === 3 ? 80 : 58;
     const gap = columns === 3 ? 20 : 14;
     const rowGap = columns === 3 ? 20 : 14;
-    const headerHeight = selection.season === 'current' ? 190 : 210;
+    const headerHeight = selection.season === CURRENT_SEASON_ID ? 190 : 210;
     const cardWidth = (width - margin * 2 - gap * (columns - 1)) / columns;
     const cardHeight = columns === 3 ? 365 : 285;
     const rows = Math.ceil(entries.length / columns);
@@ -2586,18 +2634,37 @@
       drawShowcaseBackground(context,width,height);
 
       const rarityLabel = selection.rarity === 'all' ? 'All Rarities' : selection.rarity;
-      const selectionLabel = `${showcaseImageStatusLabel(selection.status)} - ${rarityLabel}`;
+      const selectionLabel = `${showcaseImageStatusLabel(selection.status)} • ${rarityLabel}`;
       context.textAlign = 'center';
-      context.fillStyle = '#fff';
-      context.font = '700 62px "UserCustomFont","Trebuchet MS",sans-serif';
-      context.fillText('My Sprite Tracker',width / 2,76);
-      context.fillStyle = '#e3e1e8';
-      context.font = '600 29px "UserCustomFont","Trebuchet MS",sans-serif';
-      context.fillText(selectionLabel,width / 2,126);
-      if (selection.season !== 'current') {
-        context.fillStyle = '#bbb9c4';
-        context.font = '700 15px "UserCustomFont","Trebuchet MS",sans-serif';
-        context.fillText(seasonViewLabel(selection.season).toUpperCase(),width / 2,160);
+      const titleGradient = context.createLinearGradient(width * .3,0,width * .7,0);
+      titleGradient.addColorStop(0,'#dff7ff');
+      titleGradient.addColorStop(.48,'#ffffff');
+      titleGradient.addColorStop(1,'#eadcff');
+      context.font = '82px "Sprite Display","Arial Black",sans-serif';
+      context.lineJoin = 'round';
+      context.lineWidth = 9;
+      context.strokeStyle = 'rgba(0,0,0,.82)';
+      context.shadowColor = 'rgba(133,207,255,.58)';
+      context.shadowBlur = 24;
+      context.strokeText('My Sprite Tracker',width / 2,91);
+      context.fillStyle = titleGradient;
+      context.fillText('My Sprite Tracker',width / 2,91);
+      context.shadowBlur = 0;
+
+      context.font = '700 22px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif';
+      const subtitle = selectionLabel.toUpperCase();
+      const subtitleWidth = Math.min(width - 180,context.measureText(subtitle).width + 72);
+      fillRounded(context,(width - subtitleWidth) / 2,119,subtitleWidth,46,23,'rgba(8,10,20,.72)');
+      context.strokeStyle = 'rgba(184,221,255,.42)';
+      context.lineWidth = 1.5;
+      roundedPath(context,(width - subtitleWidth) / 2,119,subtitleWidth,46,23);
+      context.stroke();
+      context.fillStyle = '#f4f7ff';
+      context.fillText(subtitle,width / 2,150);
+      if (SEASON_FEATURE_VISIBLE && selection.season !== CURRENT_SEASON_ID) {
+        context.fillStyle = '#c6ccda';
+        context.font = '700 15px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif';
+        context.fillText(seasonViewLabel(selection.season).toUpperCase(),width / 2,190);
       }
 
       for (let index = 0; index < entries.length; index += 1) {
@@ -2622,12 +2689,12 @@
       const link = 'snorkythebeard.github.io/Real-Sprite-Checklist';
       context.textAlign = 'center';
       context.fillStyle = '#e8e7ec';
-      context.font = '600 16px "UserCustomFont","Trebuchet MS",sans-serif';
+      context.font = '600 16px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif';
       context.fillText(link,width / 2,footerCenterY - 22);
 
       const disclaimer = document.querySelector('.fan-content-disclaimer')?.textContent?.trim() || '';
       context.fillStyle = '#aaa9b2';
-      context.font = '500 11px "UserCustomFont","Trebuchet MS",sans-serif';
+      context.font = '500 11px "Avenir Next Rounded","Avenir Next","Segoe UI",sans-serif';
       const lines = wrappedCanvasLines(context,disclaimer,width - 190,3);
       const disclaimerStartY = footerCenterY + 9;
       lines.forEach((line,index) => context.fillText(line,width / 2,disclaimerStartY + index * 16));
@@ -2730,7 +2797,7 @@
     const unownedPage = isUnownedPage();
     document.body.classList.toggle('unowned-page',unownedPage);
     spriteEditorToggle.hidden = unownedPage;
-    addSpriteGroupBtn.hidden = unownedPage || seasonView !== 'current';
+    addSpriteGroupBtn.hidden = unownedPage || seasonView !== CURRENT_SEASON_ID;
     if (!unownedPage || !spriteEditMode) return;
     spriteEditMode = false;
     document.body.classList.remove('sprite-edit-mode');
@@ -2880,6 +2947,6 @@
   const activeHash = `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js?v=75',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js?v=77',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
   }
 })();

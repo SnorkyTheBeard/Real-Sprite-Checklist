@@ -1,16 +1,21 @@
-@font-face { font-family:"Sprite Playful"; src:url("fonts/comic-neue-regular.woff2") format("woff2"); font-style:normal; font-weight:400; font-display:swap; }
-@font-face { font-family:"Sprite Playful"; src:url("fonts/comic-neue-bold.woff2") format("woff2"); font-style:normal; font-weight:700; font-display:swap; }
+@font-face {
+  font-family:"Sprite Display";
+  src:url("fonts/Burbank Big Condensed Black.otf") format("opentype");
+  font-style:normal;
+  font-weight:900;
+  font-display:swap;
+}
 
 :root {
   color-scheme:dark;
   --safe-top:env(safe-area-inset-top,0px);
   --safe-bottom:env(safe-area-inset-bottom,0px);
-  --font-body:"Sprite Playful","Trebuchet MS",cursive;
-  --font-heading:var(--font-body);
-  --font-button:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  --font-body:"Avenir Next Rounded","Avenir Next","Segoe UI",Arial,sans-serif;
+  --font-heading:"Sprite Display","Arial Black",Impact,sans-serif;
+  --font-button:"Avenir Next Rounded","Avenir Next","Segoe UI",Arial,sans-serif;
   --font-summary:var(--font-body);
-  --theme-text:#f9f001;
-  --theme-muted:#c8c3e5;
+  --theme-text:#fffaf2;
+  --theme-muted:#dce1ee;
   --theme-body-bg:#050505;
   --theme-body-image:none;
   --theme-body-size:cover;
@@ -310,11 +315,39 @@ h4,
   pointer-events: none;
   background-color: var(--theme-page-bg);
   background-image:
-    linear-gradient(180deg,rgba(5,7,18,.16),rgba(5,7,18,.28)),
+    radial-gradient(ellipse at 14% 4%,var(--rarity-haze),transparent 38%),
+    radial-gradient(ellipse at 88% 36%,var(--rarity-sheen),transparent 42%),
+    repeating-linear-gradient(128deg,rgba(255,255,255,.022) 0 1px,transparent 1px 13px),
+    linear-gradient(180deg,rgba(3,5,15,.12),rgba(3,5,15,.36)),
     var(--theme-page-image);
-  background-position: center,center;
-  background-size: cover,cover;
-  background-repeat: no-repeat,no-repeat;
+  background-position:center,center,center,center,center;
+  background-size:cover,cover,auto,cover,cover;
+  background-repeat:no-repeat,no-repeat,repeat,no-repeat,no-repeat;
+}
+
+body[data-rarity="rare"] {
+  --rarity-haze:rgba(82,191,255,.20);
+  --rarity-sheen:rgba(70,108,255,.15);
+}
+
+body[data-rarity="epic"] {
+  --rarity-haze:rgba(191,99,255,.20);
+  --rarity-sheen:rgba(255,85,194,.13);
+}
+
+body[data-rarity="legendary"] {
+  --rarity-haze:rgba(255,171,64,.20);
+  --rarity-sheen:rgba(255,104,38,.12);
+}
+
+body[data-rarity="mythic"] {
+  --rarity-haze:rgba(255,222,99,.18);
+  --rarity-sheen:rgba(255,142,44,.12);
+}
+
+body[data-page="unowned"] {
+  --rarity-haze:rgba(168,177,201,.15);
+  --rarity-sheen:rgba(113,124,157,.10);
 }
 
 #checklistPage {
@@ -495,25 +528,58 @@ footer {
   paint-order: stroke fill;
   text-shadow: 0 2px 5px rgba(0,0,0,.85);
 }
-/* Final Sprite Tracker font */
+/* Clean local typography: Fortnite-style display type with readable UI text. */
 :root {
-  --font-body: "Fredoka", sans-serif !important;
-  --font-heading: "Fredoka", sans-serif !important;
-  --font-button: "Fredoka", sans-serif !important;
-  --font-summary: "Fredoka", sans-serif !important;
+  --font-body:"Avenir Next Rounded","Avenir Next","Segoe UI",Arial,sans-serif !important;
+  --font-heading:"Sprite Display","Arial Black",Impact,sans-serif !important;
+  --font-button:"Avenir Next Rounded","Avenir Next","Segoe UI",Arial,sans-serif !important;
+  --font-summary:"Avenir Next Rounded","Avenir Next","Segoe UI",Arial,sans-serif !important;
+  --theme-text:#fffaf2 !important;
+  --theme-muted:#dce1ee !important;
 }
 
 body,
-button,
 input,
+select,
+textarea,
+.summary-box {
+  font-family:var(--font-body) !important;
+}
+
+button {
+  font-family:var(--font-button) !important;
+}
+
 h1,
 h2,
 h3,
 h4,
 .kicker,
-.page-eyebrow,
-.summary-box {
-  font-family: "Fredoka", sans-serif !important;
+.page-eyebrow {
+  font-family:var(--font-heading) !important;
+  letter-spacing:.025em;
+}
+
+#activePageTitle {
+  color:#fffaf2 !important;
+  letter-spacing:.015em;
+  text-shadow:
+    0 2px 0 rgba(3,5,15,.95),
+    0 0 15px var(--rarity-haze),
+    0 8px 20px rgba(0,0,0,.48);
+}
+
+.collection-head h3,
+.sprite-variant-line h4 {
+  color:#fffdf7;
+  letter-spacing:.025em;
+}
+
+.tab,
+.collect-button,
+.tracker-tools button,
+.page-head-actions button {
+  letter-spacing:.01em;
 }
 
 /* Sprite-card editing: add, delete, upload artwork, and reorder only. */

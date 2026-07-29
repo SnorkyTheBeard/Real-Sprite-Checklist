@@ -1,8 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -143,7 +140,7 @@
       }
     })();
   </script>
-  <link rel="stylesheet" href="styles.css?v=75">
+  <link rel="stylesheet" href="styles.css?v=77">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Skip to checklist</a>
@@ -184,14 +181,13 @@
       <button id="backupBtn" type="button">Save / restore progress</button>
     </section>
 
-    <section class="season-vault-bar" aria-label="Season Vault">
+    <section class="season-vault-bar" aria-label="Season Vault" hidden>
       <label for="seasonViewSelect">Season Vault</label>
       <select id="seasonViewSelect">
-        <option value="current">Current Season</option>
-        <option value="previous">Previous Seasons</option>
+        <option value="chapter-7-season-3">Chapter 7 Season 3</option>
         <option value="all">All Seasons</option>
       </select>
-      <span id="seasonVaultCount">0 vaulted</span>
+      <span id="seasonVaultCount">0 outside current season</span>
     </section>
 
     <nav class="rarity-tabs" id="rarityTabs" aria-label="Sprite rarity pages" role="tablist"></nav>
@@ -274,7 +270,7 @@
       <label class="add-sprite-label" for="githubTokenInput">GitHub token</label>
       <input id="githubTokenInput" type="password" required autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Paste token here">
       <p class="publish-token-help">
-        <a href="https://github.com/settings/personal-access-tokens/new?name=Sprite%20Tracker%20Publisher&amp;description=Publishes%20sprite%20card%20changes%20to%20Sprite-Checklist-Clean&amp;target_name=SnorkyTheBeard&amp;expires_in=90&amp;contents=write" target="_blank" rel="noopener">Create a fine-grained GitHub token</a>, select only <strong>Sprite-Checklist-Clean</strong>, and give <strong>Contents</strong> read-and-write access. The token is kept only in this browser tab.
+        <a href="https://github.com/settings/personal-access-tokens/new?name=Sprite%20Tracker%20Publisher&amp;description=Publishes%20sprite%20card%20changes%20to%20Real-Sprite-Checklist&amp;target_name=SnorkyTheBeard&amp;expires_in=90&amp;contents=write" target="_blank" rel="noopener">Create a fine-grained GitHub token</a>, select only <strong>Real-Sprite-Checklist</strong>, and give <strong>Contents</strong> read-and-write access. The token is kept only in this browser tab.
       </p>
       <p class="publish-sprites-status" id="publishSpritesStatus" role="status" aria-live="polite"></p>
       <div class="dialog-actions">
@@ -308,11 +304,10 @@
             <option value="Mythic">Mythic</option>
           </select>
         </label>
-        <label>
+        <label class="showcase-season-filter" hidden>
           <span>Season</span>
           <select id="showcaseSeason">
-            <option value="current">Current Season</option>
-            <option value="previous">Previous Seasons</option>
+            <option value="chapter-7-season-3">Chapter 7 Season 3</option>
             <option value="all">All Seasons</option>
           </select>
         </label>
@@ -370,7 +365,7 @@
   <div class="status-toast" id="statusToast" role="status" aria-live="polite"></div>
   <noscript>This checklist needs JavaScript enabled to save progress.</noscript>
 
-  <script src="data.js?v=67"></script>
-  <script src="app.js?v=75"></script>
+  <script src="data.js?v=77"></script>
+  <script src="app.js?v=77"></script>
 </body>
 </html>

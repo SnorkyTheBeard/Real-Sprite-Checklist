@@ -26,10 +26,10 @@ text: {
   pages: { Rare: null, Epic: null, Legendary: null, Mythic: null },
 
   rarityBackgrounds: {
-    Rare:      { image: "assets/page-backgrounds/page-bg-rare.webp",      fit: "cover", color: "#061b45" },
-    Epic:      { image: "assets/page-backgrounds/page-bg-epic.webp",      fit: "cover", color: "#190b3d" },
-    Legendary: { image: "assets/page-backgrounds/page-bg-legendary.webp", fit: "cover", color: "#431400" },
-    Mythic:    { image: "assets/page-backgrounds/page-bg-mythic.webp",    fit: "cover", color: "#7c5700" }
+    Rare:      { image: "assets/page-backgrounds/page-bg-rare.webp",      fit: "cover", color: "#031328" },
+    Epic:      { image: "assets/page-backgrounds/page-bg-epic.webp",      fit: "cover", color: "#12071d" },
+    Legendary: { image: "assets/page-backgrounds/page-bg-legendary.webp", fit: "cover", color: "#1a0d05" },
+    Mythic:    { image: "assets/page-backgrounds/page-bg-mythic.webp",    fit: "cover", color: "#100c08" }
   },
 
   rarityHeaders: { Rare: null, Epic: null, Legendary: null, Mythic: null },

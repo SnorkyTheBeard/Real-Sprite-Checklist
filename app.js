@@ -160,10 +160,10 @@
   };
 
   const DEFAULT_PAGE_BACKGROUNDS = {
-    Rare:{ enabled:true, color:'#071a3c', image:'assets/page-backgrounds/page-bg-rare.webp', mode:'tile' },
-    Epic:{ enabled:true, color:'#170b38', image:'assets/page-backgrounds/page-bg-epic.webp', mode:'tile' },
-    Legendary:{ enabled:true, color:'#160f08', image:'assets/page-backgrounds/page-bg-legendary.webp', mode:'tile' },
-    Mythic:{ enabled:true, color:'#16091d', image:'assets/page-backgrounds/page-bg-mythic.webp', mode:'tile' }
+    Rare:{ enabled:true, color:'#031328', image:'assets/page-backgrounds/page-bg-rare.webp', mode:'cover' },
+    Epic:{ enabled:true, color:'#12071d', image:'assets/page-backgrounds/page-bg-epic.webp', mode:'cover' },
+    Legendary:{ enabled:true, color:'#1a0d05', image:'assets/page-backgrounds/page-bg-legendary.webp', mode:'cover' },
+    Mythic:{ enabled:true, color:'#100c08', image:'assets/page-backgrounds/page-bg-mythic.webp', mode:'cover' }
   };
 
   const DEFAULT_THEME = {
@@ -3035,6 +3035,6 @@
   const activeHash = isUnownedPage() ? `#${missingView}` : `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js?v=81',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js?v=82',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
   }
 })();

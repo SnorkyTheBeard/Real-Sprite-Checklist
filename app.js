@@ -26,6 +26,7 @@
   const STORAGE_SCOPE = appStorageScope();
   const PROGRESS_KEY = `galaxy_sprite_tracker_progress_v2_${STORAGE_SCOPE}`;
   const VIEW_MODES_KEY = `galaxy_sprite_tracker_view_modes_v1_${STORAGE_SCOPE}`;
+  const MISSING_VIEW_KEY = `galaxy_sprite_tracker_missing_view_v1_${STORAGE_SCOPE}`;
   const SEASON_VIEW_KEY = `galaxy_sprite_tracker_season_view_v1_${STORAGE_SCOPE}`;
   const SPRITE_CARD_EDITS_KEY = `galaxy_sprite_tracker_sprite_cards_v1_${STORAGE_SCOPE}`;
   const PRE_RESTORE_PROGRESS_KEY = `galaxy_sprite_tracker_progress_before_restore_v1_${STORAGE_SCOPE}`;
@@ -82,6 +83,16 @@
     if (!legacy) return {};
     try { localStorage.setItem(PROGRESS_KEY,JSON.stringify(legacy)); } catch { /* Keep it in memory. */ }
     return legacy;
+  }
+
+  function loadMissingView() {
+    const hashView = decodeURIComponent(location.hash.slice(1)).toLowerCase();
+    if (hashView === 'unowned' || hashView === 'unmastered') return hashView;
+    try {
+      return localStorage.getItem(MISSING_VIEW_KEY) === 'unmastered' ? 'unmastered' : 'unowned';
+    } catch {
+      return 'unowned';
+    }
   }
 
   function loadSpriteCardEdits() {
@@ -337,6 +348,7 @@
   let spriteViewModes = loadViewModes();
   let seasonView = loadSeasonView();
   let spriteEditMode = false;
+  let missingView = loadMissingView();
   let activeRarity = rarityFromHash() || defaultRarity;
   let toastTimer = 0;
   let pendingRestore = null;
@@ -496,6 +508,7 @@
 
   function rarityFromHash() {
     const value = decodeURIComponent(location.hash.slice(1)).toLowerCase();
+    if (value === 'unmastered') return UNOWNED_PAGE;
     return pageTabs.find((page) => page.toLowerCase() === value) || null;
   }
 
@@ -1690,6 +1703,28 @@
     const missing = unownedCount();
     const unmastered = unmasteredCount();
     pageTabs.forEach((rarity) => {
+      if (rarity === UNOWNED_PAGE) {
+        const select = document.createElement('select');
+        const placeholder = document.createElement('option');
+        const unownedOption = document.createElement('option');
+        const unmasteredOption = document.createElement('option');
+        select.id = 'tab-unowned';
+        select.className = 'tab missing-filter-select';
+        select.setAttribute('aria-label',`Missing Sprite view: ${missing} unowned and ${unmastered} unmastered`);
+        select.setAttribute('aria-selected',String(isUnownedPage()));
+        placeholder.value = '';
+        placeholder.textContent = 'Missing Sprites ▾';
+        placeholder.disabled = true;
+        unownedOption.value = 'unowned';
+        unownedOption.textContent = `Unowned (${missing})`;
+        unmasteredOption.value = 'unmastered';
+        unmasteredOption.textContent = `Unmastered (${unmastered})`;
+        select.append(placeholder,unownedOption,unmasteredOption);
+        select.value = isUnownedPage() ? missingView : '';
+        select.addEventListener('change',() => setMissingView(select.value,{ historyMode:'push', announce:true }));
+        tabsEl.appendChild(select);
+        return;
+      }
       const stats = rarity === UNOWNED_PAGE ? null : rarityStats(rarity);
       const button = document.createElement('button');
       const count = document.createElement('small');
@@ -1700,13 +1735,11 @@
       button.setAttribute('aria-controls','checklistPage');
       button.setAttribute('aria-selected',String(rarity === activeRarity));
       button.tabIndex = rarity === activeRarity ? 0 : -1;
-      button.append(document.createTextNode(rarity === UNOWNED_PAGE ? 'Unowned/Unmastered' : rarity),count);
-      count.textContent = rarity === UNOWNED_PAGE ? `(${missing}/${unmastered})` : `${stats.collected}/${stats.total}`;
+      button.append(document.createTextNode(rarity),count);
+      count.textContent = `${stats.collected}/${stats.total}`;
       button.setAttribute(
         'aria-label',
-        rarity === UNOWNED_PAGE
-          ? `${missing} unowned Sprites and ${unmastered} unmastered Sprites`
-          : `${rarity} Sprites, ${stats.collected} of ${stats.total} collected`
+        `${rarity} Sprites, ${stats.collected} of ${stats.total} collected`
       );
       button.addEventListener('click',() => switchRarity(rarity,{ historyMode:'push', announce:true }));
       button.addEventListener('keydown',handleTabKeys);
@@ -1718,8 +1751,18 @@
     collectionsEl.replaceChildren();
     const page = design.pages[activeRarity] || DEFAULT_PAGES[activeRarity];
     renderOptionalText(pageEyebrowEl,page.eyebrow);
-    renderOptionalText(pageTitleEl,page.title);
-    renderOptionalText(pageDescriptionEl,page.description);
+    renderOptionalText(
+      pageTitleEl,
+      isUnownedPage() ? (missingView === 'unmastered' ? 'Unmastered Sprites' : 'Unowned Sprites') : page.title
+    );
+    renderOptionalText(
+      pageDescriptionEl,
+      isUnownedPage()
+        ? (missingView === 'unmastered'
+            ? 'Every Sprite not yet marked Mastered.'
+            : 'Every Sprite not yet marked In Collection.')
+        : page.description
+    );
     document.getElementById('checklistPage').setAttribute('aria-labelledby','activePageTitle');
     let eagerImagesRemaining = 2;
     const unownedPage = isUnownedPage();
@@ -1806,17 +1849,6 @@
       return appended;
     };
 
-    const appendMissingHeading = (label,count,className) => {
-      const heading = document.createElement('header');
-      heading.className = `missing-section-heading ${className}`;
-      const title = document.createElement('h3');
-      const total = document.createElement('span');
-      title.textContent = label;
-      total.textContent = `(${count})`;
-      heading.append(title,total);
-      collectionsEl.appendChild(heading);
-    };
-
     const appendMissingEmpty = (message) => {
       const empty = document.createElement('p');
       empty.className = 'empty-sprite-row unowned-empty';
@@ -1828,27 +1860,21 @@
     };
 
     if (unownedPage) {
-      const missing = unownedCount();
-      const unmastered = unmasteredCount();
       const namedSeason = seasonView !== CURRENT_SEASON_ID && seasonView !== SEASON_VIEW_ALL;
-      appendMissingHeading('Unowned',missing,'unowned-section-heading');
-      const unownedGroups = appendCollectionGroups(
-        (family,variant) => !variantState(family.id,variant.id).collected
+      const showingUnmastered = missingView === 'unmastered';
+      const appended = appendCollectionGroups(
+        (family,variant) => showingUnmastered
+          ? !variantState(family.id,variant.id).mastered
+          : !variantState(family.id,variant.id).collected
       );
-      if (!unownedGroups) {
-        appendMissingEmpty(namedSeason
-          ? `You own every Sprite from ${seasonViewLabel()}!`
-          : 'You own every Sprite—your collection is complete!');
-      }
-
-      appendMissingHeading('Unmastered',unmastered,'unmastered-section-heading');
-      const unmasteredGroups = appendCollectionGroups(
-        (family,variant) => !variantState(family.id,variant.id).mastered
-      );
-      if (!unmasteredGroups) {
-        appendMissingEmpty(namedSeason
-          ? `Every Sprite from ${seasonViewLabel()} is mastered!`
-          : 'Every Sprite is mastered—amazing!');
+      if (!appended) {
+        appendMissingEmpty(showingUnmastered
+          ? (namedSeason
+              ? `Every Sprite from ${seasonViewLabel()} is mastered!`
+              : 'Every Sprite is mastered—amazing!')
+          : (namedSeason
+              ? `You own every Sprite from ${seasonViewLabel()}!`
+              : 'You own every Sprite—your collection is complete!'));
       }
       return;
     }
@@ -1866,10 +1892,14 @@
     const unmastered = Math.max(0,overall.total - overall.mastered);
     collectedTotalEl.textContent = `${overall.collected} / ${overall.total}`;
     masteredTotalEl.textContent = `${overall.mastered} / ${overall.total}`;
-    pageCountEl.textContent = isUnownedPage() ? `${missing} unowned` : `${page.collected} / ${page.total}`;
+    const selectedMissingCount = missingView === 'unmastered' ? unmastered : missing;
+    const selectedMissingLabel = missingView === 'unmastered' ? 'unmastered' : 'unowned';
+    pageCountEl.textContent = isUnownedPage() ? `${selectedMissingCount} ${selectedMissingLabel}` : `${page.collected} / ${page.total}`;
     pageCountEl.setAttribute(
       'aria-label',
-      isUnownedPage() ? `${missing} Sprites not in collection` : `${page.collected} of ${page.total} collected on this page`
+      isUnownedPage()
+        ? `${selectedMissingCount} Sprites ${missingView === 'unmastered' ? 'not mastered' : 'not in collection'}`
+        : `${page.collected} of ${page.total} collected on this page`
     );
     collectedBarEl.style.width = `${overall.total ? overall.collected / overall.total * 100 : 0}%`;
     masteredBarEl.style.width = `${overall.total ? overall.mastered / overall.total * 100 : 0}%`;
@@ -1882,16 +1912,17 @@
       section.querySelector('.collection-mastered-count').textContent = `${stats.mastered} / ${stats.total} mastered`;
     });
     tabsEl.querySelectorAll('.tab').forEach((tab) => {
-      if (tab.id === 'tab-unowned') {
-        tab.querySelector('small').textContent = `(${missing}/${unmastered})`;
-        tab.setAttribute('aria-label',`${missing} unowned Sprites and ${unmastered} unmastered Sprites`);
-        return;
-      }
       const rarity = rarities.find((name) => tab.id === `tab-${name.toLowerCase()}`);
       if (!rarity) return;
       const stats = rarityStats(rarity);
       tab.querySelector('small').textContent = `${stats.collected}/${stats.total}`;
     });
+    const missingSelect = document.getElementById('tab-unowned');
+    if (missingSelect) {
+      missingSelect.querySelector('option[value="unowned"]').textContent = `Unowned (${missing})`;
+      missingSelect.querySelector('option[value="unmastered"]').textContent = `Unmastered (${unmastered})`;
+      missingSelect.setAttribute('aria-label',`Missing Sprite view: ${missing} unowned and ${unmastered} unmastered`);
+    }
   }
 
   function renderAll() {
@@ -1916,13 +1947,27 @@
     applySpriteViewMode();
     renderCollections();
     updateCounters();
-    const hash = `#${rarity.toLowerCase()}`;
+    const hash = options.hash || `#${rarity.toLowerCase()}`;
     if (options.historyMode === 'push' && location.hash !== hash) history.pushState({ rarity },'',hash);
     else if (location.hash !== hash) history.replaceState({ rarity },'',hash);
     const activeTab = document.getElementById(`tab-${rarity.toLowerCase()}`);
     activeTab?.scrollIntoView({ block:'nearest', inline:'center' });
     if (options.focusTab) activeTab?.focus();
     if (options.announce && changed) showToast(`${rarity} page`);
+  }
+
+  function setMissingView(view,options = {}) {
+    const next = view === 'unmastered' ? 'unmastered' : 'unowned';
+    const changed = missingView !== next || !isUnownedPage();
+    missingView = next;
+    try { localStorage.setItem(MISSING_VIEW_KEY,missingView); } catch { /* The choice can remain active for this visit. */ }
+    switchRarity(UNOWNED_PAGE,{
+      historyMode:options.historyMode,
+      focusTab:options.focusTab,
+      hash:`#${missingView}`,
+      announce:false
+    });
+    if (options.announce && changed) showToast(`${missingView === 'unmastered' ? 'Unmastered' : 'Unowned'} Sprites`);
   }
 
   function normalizeSearchText(value) {
@@ -2978,14 +3023,18 @@
     showToast(`${name} added to ${activeRarity} — upload the Base sprite image`);
   });
   document.getElementById('cancelAddSpriteGroupBtn').addEventListener('click',() => addSpriteGroupDialog.close());
-  window.addEventListener('hashchange',() => switchRarity(rarityFromHash() || defaultRarity));
+  window.addEventListener('hashchange',() => {
+    const hashView = decodeURIComponent(location.hash.slice(1)).toLowerCase();
+    if (hashView === 'unowned' || hashView === 'unmastered') missingView = hashView;
+    switchRarity(rarityFromHash() || defaultRarity);
+  });
   document.getElementById('resetBtn').addEventListener('click',() => resetDialog.showModal());
   document.getElementById('confirmResetBtn').addEventListener('click',resetProgress);
 
   renderAll();
-  const activeHash = `#${activeRarity.toLowerCase()}`;
+  const activeHash = isUnownedPage() ? `#${missingView}` : `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js?v=80',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js?v=81',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
   }
 })();

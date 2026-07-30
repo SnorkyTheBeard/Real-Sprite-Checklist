@@ -1,12 +1,12 @@
-const CACHE = 'galaxy-sprite-checklist-v80';
+const CACHE = 'galaxy-sprite-checklist-v81';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=80',
+  './styles.css?v=81',
   './published-design.js',
   './art-config.js?v=67',
-  './data.js?v=80',
-  './app.js?v=80',
+  './data.js?v=81',
+  './app.js?v=81',
   './manifest.webmanifest?v=67',
   './fonts/Burbank Big Condensed Black.otf',
   './fonts/Fredoka-Regular.woff2',

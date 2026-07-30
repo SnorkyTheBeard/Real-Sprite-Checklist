@@ -132,8 +132,8 @@
     }])),
     [UNOWNED_PAGE]:{
       eyebrow:'Sprite Checklist',
-      title:'Unowned Sprites',
-      description:'Every Sprite not yet marked In Collection.'
+      title:'Unowned/Unmastered',
+      description:'See every Sprite still missing from your collection or waiting to be mastered.'
     }
   };
 
@@ -1668,6 +1668,11 @@
     return Math.max(0,overall.total - overall.collected);
   }
 
+  function unmasteredCount(mode = seasonView) {
+    const overall = overallStats(mode);
+    return Math.max(0,overall.total - overall.mastered);
+  }
+
   function handleTabKeys(event) {
     if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
     event.preventDefault();
@@ -1683,6 +1688,7 @@
   function renderTabs() {
     tabsEl.replaceChildren();
     const missing = unownedCount();
+    const unmastered = unmasteredCount();
     pageTabs.forEach((rarity) => {
       const stats = rarity === UNOWNED_PAGE ? null : rarityStats(rarity);
       const button = document.createElement('button');
@@ -1694,12 +1700,12 @@
       button.setAttribute('aria-controls','checklistPage');
       button.setAttribute('aria-selected',String(rarity === activeRarity));
       button.tabIndex = rarity === activeRarity ? 0 : -1;
-      button.append(document.createTextNode(rarity),count);
-      count.textContent = rarity === UNOWNED_PAGE ? `(${missing})` : `${stats.collected}/${stats.total}`;
+      button.append(document.createTextNode(rarity === UNOWNED_PAGE ? 'Unowned/Unmastered' : rarity),count);
+      count.textContent = rarity === UNOWNED_PAGE ? `(${missing}/${unmastered})` : `${stats.collected}/${stats.total}`;
       button.setAttribute(
         'aria-label',
         rarity === UNOWNED_PAGE
-          ? `Unowned Sprites, ${missing} remaining`
+          ? `${missing} unowned Sprites and ${unmastered} unmastered Sprites`
           : `${rarity} Sprites, ${stats.collected} of ${stats.total} collected`
       );
       button.addEventListener('click',() => switchRarity(rarity,{ historyMode:'push', announce:true }));
@@ -1718,98 +1724,138 @@
     let eagerImagesRemaining = 2;
     const unownedPage = isUnownedPage();
 
-    allFamilies().filter((family) => unownedPage || familyRarity(family) === activeRarity).forEach((family) => {
-      const group = familyView(family);
-      if (!familyMatchesSeason(family)) return;
-      const rowVariants = variantsForSeason(family).filter(
-        (variant) => !unownedPage || !variantState(family.id,variant.id).collected
-      );
-      if (!rowVariants.length && !spriteEditMode) return;
-      const stats = familyStats(family);
-      const section = document.createElement('section');
-      section.className = 'collection';
-      section.dataset.rarity = familyRarity(family);
-      section.dataset.familyId = family.id;
-      section.classList.toggle('archived-group',group.archived);
-      if (group.customBg) {
-        section.classList.add('has-custom-background');
-        applyCustomBackground(section,group.bgColor,group.bgImage,group.bgMode);
-      }
+    const appendCollectionGroups = (variantFilter = null) => {
+      let appended = 0;
+      allFamilies().filter((family) => unownedPage || familyRarity(family) === activeRarity).forEach((family) => {
+        const group = familyView(family);
+        if (!familyMatchesSeason(family)) return;
+        const rowVariants = variantsForSeason(family).filter(
+          (variant) => !variantFilter || variantFilter(family,variant)
+        );
+        if (!rowVariants.length && !spriteEditMode) return;
+        const stats = familyStats(family);
+        const section = document.createElement('section');
+        section.className = 'collection';
+        section.dataset.rarity = familyRarity(family);
+        section.dataset.familyId = family.id;
+        section.classList.toggle('archived-group',group.archived);
+        if (group.customBg) {
+          section.classList.add('has-custom-background');
+          applyCustomBackground(section,group.bgColor,group.bgImage,group.bgMode);
+        }
 
-      const header = document.createElement('div');
-      header.className = 'collection-head';
-      const titleWrap = document.createElement('div');
-      titleWrap.className = 'collection-title-wrap';
-      const title = document.createElement('h3');
-      title.textContent = group.name || '';
-      title.hidden = !group.name;
-      const groupSeasonBadge = document.createElement('span');
-      groupSeasonBadge.className = 'group-season-badge';
-      groupSeasonBadge.textContent = seasonViewLabel(group.seasonId);
-      groupSeasonBadge.hidden = !SEASON_FEATURE_VISIBLE || !group.archived;
-      titleWrap.append(title,groupSeasonBadge);
-      const meta = document.createElement('div');
-      const progressCounts = document.createElement('div');
-      const masteredCount = document.createElement('span');
-      const count = document.createElement('span');
-      const hint = document.createElement('span');
-      const headerActions = document.createElement('div');
-      const addButton = document.createElement('button');
-      meta.className = 'collection-meta';
-      progressCounts.className = 'collection-progress-counts';
-      progressCounts.setAttribute('aria-label',`${group.name || 'Sprite'} progress`);
-      masteredCount.className = 'collection-count collection-mastered-count';
-      masteredCount.textContent = `${stats.mastered} / ${stats.total} mastered`;
-      count.className = 'collection-count';
-      count.textContent = `${stats.collected} / ${stats.total} collected`;
-      hint.className = 'row-hint';
-      hint.setAttribute('aria-hidden','true');
-      hint.textContent = 'Swipe variants →';
-      progressCounts.append(masteredCount,count);
-      meta.append(progressCounts,hint);
-      headerActions.className = 'collection-head-actions';
-      addButton.type = 'button';
-      addButton.className = 'add-sprite-button';
-      addButton.textContent = '+ Add sprite';
-      addButton.hidden = seasonView !== CURRENT_SEASON_ID;
-      addButton.addEventListener('click',() => openAddSpriteDialog(family.id));
-      headerActions.append(meta,addButton);
-      header.append(titleWrap,headerActions);
+        const header = document.createElement('div');
+        header.className = 'collection-head';
+        const titleWrap = document.createElement('div');
+        titleWrap.className = 'collection-title-wrap';
+        const title = document.createElement('h3');
+        title.textContent = group.name || '';
+        title.hidden = !group.name;
+        const groupSeasonBadge = document.createElement('span');
+        groupSeasonBadge.className = 'group-season-badge';
+        groupSeasonBadge.textContent = seasonViewLabel(group.seasonId);
+        groupSeasonBadge.hidden = !SEASON_FEATURE_VISIBLE || !group.archived;
+        titleWrap.append(title,groupSeasonBadge);
+        const meta = document.createElement('div');
+        const progressCounts = document.createElement('div');
+        const masteredCount = document.createElement('span');
+        const count = document.createElement('span');
+        const hint = document.createElement('span');
+        const headerActions = document.createElement('div');
+        const addButton = document.createElement('button');
+        meta.className = 'collection-meta';
+        progressCounts.className = 'collection-progress-counts';
+        progressCounts.setAttribute('aria-label',`${group.name || 'Sprite'} progress`);
+        masteredCount.className = 'collection-count collection-mastered-count';
+        masteredCount.textContent = `${stats.mastered} / ${stats.total} mastered`;
+        count.className = 'collection-count';
+        count.textContent = `${stats.collected} / ${stats.total} collected`;
+        hint.className = 'row-hint';
+        hint.setAttribute('aria-hidden','true');
+        hint.textContent = 'Swipe variants →';
+        progressCounts.append(masteredCount,count);
+        meta.append(progressCounts,hint);
+        headerActions.className = 'collection-head-actions';
+        addButton.type = 'button';
+        addButton.className = 'add-sprite-button';
+        addButton.textContent = '+ Add sprite';
+        addButton.hidden = seasonView !== CURRENT_SEASON_ID;
+        addButton.addEventListener('click',() => openAddSpriteDialog(family.id));
+        headerActions.append(meta,addButton);
+        header.append(titleWrap,headerActions);
 
-      const row = document.createElement('div');
-      row.className = 'variant-row';
-      row.setAttribute('aria-label',`${group.name || 'Sprite'} variants`);
-      rowVariants.forEach((variant) => {
-        const image = variantView(family,variant).image;
-        const eager = Boolean(image && eagerImagesRemaining > 0);
-        if (eager) eagerImagesRemaining -= 1;
-        row.appendChild(makeCard(family,variant,{ eager }));
+        const row = document.createElement('div');
+        row.className = 'variant-row';
+        row.setAttribute('aria-label',`${group.name || 'Sprite'} variants`);
+        rowVariants.forEach((variant) => {
+          const image = variantView(family,variant).image;
+          const eager = Boolean(image && eagerImagesRemaining > 0);
+          if (eager) eagerImagesRemaining -= 1;
+          row.appendChild(makeCard(family,variant,{ eager }));
+        });
+        if (!rowVariants.length) {
+          const empty = document.createElement('p');
+          empty.className = 'empty-sprite-row';
+          empty.textContent = 'No sprite cards in this row.';
+          row.appendChild(empty);
+        }
+        section.append(header,row);
+        collectionsEl.appendChild(section);
+        appended += 1;
       });
-      if (!rowVariants.length) {
-        const empty = document.createElement('p');
-        empty.className = 'empty-sprite-row';
-        empty.textContent = 'No sprite cards in this row.';
-        row.appendChild(empty);
-      }
-      section.append(header,row);
-      collectionsEl.appendChild(section);
-    });
+      return appended;
+    };
 
-    if (!collectionsEl.childElementCount && seasonView !== CURRENT_SEASON_ID && seasonView !== SEASON_VIEW_ALL && unownedPage) {
-      const empty = document.createElement('p');
-      empty.className = 'empty-sprite-row unowned-empty season-vault-empty';
-      empty.textContent = `You own every Sprite from ${seasonViewLabel()}!`;
-      collectionsEl.appendChild(empty);
-    } else if (!collectionsEl.childElementCount && seasonView !== CURRENT_SEASON_ID && seasonView !== SEASON_VIEW_ALL) {
-      const empty = document.createElement('p');
-      empty.className = 'empty-sprite-row unowned-empty season-vault-empty';
-      empty.textContent = `Nothing from this rarity is listed for ${seasonViewLabel()} yet.`;
-      collectionsEl.appendChild(empty);
-    } else if (unownedPage && !collectionsEl.childElementCount) {
+    const appendMissingHeading = (label,count,className) => {
+      const heading = document.createElement('header');
+      heading.className = `missing-section-heading ${className}`;
+      const title = document.createElement('h3');
+      const total = document.createElement('span');
+      title.textContent = label;
+      total.textContent = `(${count})`;
+      heading.append(title,total);
+      collectionsEl.appendChild(heading);
+    };
+
+    const appendMissingEmpty = (message) => {
       const empty = document.createElement('p');
       empty.className = 'empty-sprite-row unowned-empty';
-      empty.textContent = 'You own every Sprite—your collection is complete!';
+      if (seasonView !== CURRENT_SEASON_ID && seasonView !== SEASON_VIEW_ALL) {
+        empty.classList.add('season-vault-empty');
+      }
+      empty.textContent = message;
       collectionsEl.appendChild(empty);
+    };
+
+    if (unownedPage) {
+      const missing = unownedCount();
+      const unmastered = unmasteredCount();
+      const namedSeason = seasonView !== CURRENT_SEASON_ID && seasonView !== SEASON_VIEW_ALL;
+      appendMissingHeading('Unowned',missing,'unowned-section-heading');
+      const unownedGroups = appendCollectionGroups(
+        (family,variant) => !variantState(family.id,variant.id).collected
+      );
+      if (!unownedGroups) {
+        appendMissingEmpty(namedSeason
+          ? `You own every Sprite from ${seasonViewLabel()}!`
+          : 'You own every Sprite—your collection is complete!');
+      }
+
+      appendMissingHeading('Unmastered',unmastered,'unmastered-section-heading');
+      const unmasteredGroups = appendCollectionGroups(
+        (family,variant) => !variantState(family.id,variant.id).mastered
+      );
+      if (!unmasteredGroups) {
+        appendMissingEmpty(namedSeason
+          ? `Every Sprite from ${seasonViewLabel()} is mastered!`
+          : 'Every Sprite is mastered—amazing!');
+      }
+      return;
+    }
+
+    const appended = appendCollectionGroups();
+    if (!appended && seasonView !== CURRENT_SEASON_ID && seasonView !== SEASON_VIEW_ALL) {
+      appendMissingEmpty(`Nothing from this rarity is listed for ${seasonViewLabel()} yet.`);
     }
   }
 
@@ -1817,6 +1863,7 @@
     const overall = overallStats();
     const page = isUnownedPage() ? null : rarityStats(activeRarity);
     const missing = Math.max(0,overall.total - overall.collected);
+    const unmastered = Math.max(0,overall.total - overall.mastered);
     collectedTotalEl.textContent = `${overall.collected} / ${overall.total}`;
     masteredTotalEl.textContent = `${overall.mastered} / ${overall.total}`;
     pageCountEl.textContent = isUnownedPage() ? `${missing} unowned` : `${page.collected} / ${page.total}`;
@@ -1836,8 +1883,8 @@
     });
     tabsEl.querySelectorAll('.tab').forEach((tab) => {
       if (tab.id === 'tab-unowned') {
-        tab.querySelector('small').textContent = `(${missing})`;
-        tab.setAttribute('aria-label',`Unowned Sprites, ${missing} remaining`);
+        tab.querySelector('small').textContent = `(${missing}/${unmastered})`;
+        tab.setAttribute('aria-label',`${missing} unowned Sprites and ${unmastered} unmastered Sprites`);
         return;
       }
       const rarity = rarities.find((name) => tab.id === `tab-${name.toLowerCase()}`);
@@ -2939,6 +2986,6 @@
   const activeHash = `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js?v=79',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js?v=80',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
   }
 })();

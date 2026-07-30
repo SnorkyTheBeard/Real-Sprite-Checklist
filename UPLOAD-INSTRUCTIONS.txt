@@ -1,0 +1,35 @@
+SPRITE TRACKER v80 — UNOWNED/UNMASTERED PAGE
+
+Upload these four files to the TOP LEVEL of your GitHub repository and replace
+the existing files with the same names:
+
+1. app.js
+2. styles.css
+3. index.html
+4. service-worker.js
+
+Then open the fonts folder in your repository and upload these three new files:
+
+5. fonts/Fredoka-Regular.woff2
+6. fonts/Fredoka-SemiBold.woff2
+7. fonts/Fredoka-Bold.woff2
+
+Suggested commit message:
+Add combined Unowned and Unmastered page
+
+After GitHub Pages finishes publishing, fully close the tracker and reopen:
+https://snorkythebeard.github.io/Real-Sprite-Checklist/
+
+UNOWNED/UNMASTERED CHANGES
+
+- The tab is now labeled Unowned/Unmastered.
+- Its white bracketed count shows unowned first and unmastered second.
+- The Unowned section retains the existing layout and appears first.
+- A matching Unmastered section follows directly underneath.
+- Unmastered includes every Sprite not marked Mastered, including unowned
+  Sprites.
+- Both lists and counts refresh immediately as progress changes.
+
+All v79 typography improvements, v78 share-only image actions, visuals,
+publishing corrections, editing, backups, season preparation, progress, and
+image-generator safeguards remain unchanged.

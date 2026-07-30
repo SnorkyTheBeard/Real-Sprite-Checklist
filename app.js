@@ -1480,7 +1480,71 @@
     moveRight.disabled = rowIndex < 0 || rowIndex === rowVariants.length - 1;
     moveRight.setAttribute('aria-label',`Move ${view.name || 'sprite'} ${listView ? 'down' : 'right'}`);
     editorTools.append(moveLeft,moveHandle,moveRight);
+    const localCardEdits = familyCardEdits(family.id);
+    const publishedAddedVariants = design.families[family.id]?.addedVariants || [];
+    const isAddedCard =
+      localCardEdits.added.some((item) => item?.id === variant.id)
+      || localCardEdits.publishedAdded.includes(variant.id)
+      || publishedAddedVariants.some((item) => item?.id === variant.id);
 
+    if (isAddedCard) {
+      const deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'sprite-archive-button';
+      deleteButton.textContent = '×';
+      deleteButton.title = 'Delete added Sprite';
+      deleteButton.setAttribute(
+        'aria-label',
+        `Delete ${view.name || 'sprite'} card`
+      );
+
+      deleteButton.addEventListener('click',() => {
+        const spriteName = view.name || 'this Sprite';
+
+        if (!window.confirm(
+          `Delete ${spriteName}? This removes its artwork and saved progress.`
+        )) return;
+
+        const previousEdits = cloneJson(spriteCardEdits);
+        const edits = familyCardEdits(family.id);
+        const wasPublished =
+          edits.publishedAdded.includes(variant.id)
+          || publishedAddedVariants.some((item) => item?.id === variant.id);
+
+        if (wasPublished) {
+          if (!edits.deleted.includes(variant.id)) {
+            edits.deleted.push(variant.id);
+          }
+        } else {
+          edits.added = edits.added.filter(
+            (item) => item?.id !== variant.id
+          );
+        }
+
+        edits.order = edits.order.filter((id) => id !== variant.id);
+        delete edits.images[variant.id];
+        delete edits.percentages[variant.id];
+        delete edits.archived[variant.id];
+
+        if (!saveCardEditOrRestore(previousEdits)) return;
+
+        if (state[family.id]) {
+          delete state[family.id][variant.id];
+
+          if (!Object.keys(state[family.id]).length) {
+            delete state[family.id];
+          }
+
+          saveProgress();
+        }
+
+        renderCollections();
+        updateCounters();
+        showToast(`${spriteName} deleted`);
+      });
+
+      editorTools.append(deleteButton);
+    }
     const percentageEditor = document.createElement('label');
     percentageEditor.className = 'sprite-percentage-editor';
     const percentageEditorLabel = document.createElement('span');

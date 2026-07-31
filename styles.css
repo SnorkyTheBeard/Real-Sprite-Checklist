@@ -1653,3 +1653,92 @@ body.previous-season-view .season-vault-bar {
     grid-template-columns:1fr;
   }
 }
+
+/* v85: streamlined headings, progress layout, and compact tool icons. */
+:root {
+  --rarity-title-color:#65d4ff;
+}
+
+body[data-rarity="rare"] { --rarity-title-color:#65d4ff; }
+body[data-rarity="epic"] { --rarity-title-color:#c785ff; }
+body[data-rarity="legendary"] { --rarity-title-color:#ff9f43; }
+body[data-rarity="mythic"] { --rarity-title-color:#ffd45f; }
+body[data-page="unowned"] { --rarity-title-color:#f5f7ff; }
+
+#headerTitle {
+  color:var(--rarity-title-color) !important;
+  transition:color .2s ease;
+}
+
+.page-head > div:first-child {
+  width:100%;
+  text-align:center;
+}
+
+#activePageTitle {
+  margin-inline:auto;
+  font-size:clamp(30px,8vw,48px) !important;
+  text-align:center;
+}
+
+body.unowned-page .page-eyebrow,
+body.unowned-page #pageDescription {
+  display:none !important;
+}
+
+body.unowned-page #activePageTitle {
+  font-size:clamp(40px,11vw,62px) !important;
+}
+
+.collection-head {
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:7px;
+  text-align:center;
+}
+
+.collection-title-wrap,
+.collection-head-actions,
+.collection-meta {
+  width:100%;
+}
+
+.collection-head h3 {
+  font-size:clamp(23px,6.5vw,30px) !important;
+  text-align:center;
+}
+
+.collection-head-actions,
+.collection-meta {
+  align-items:center;
+}
+
+.collection-progress-counts {
+  justify-content:center;
+  flex-wrap:wrap;
+}
+
+.row-hint {
+  display:none !important;
+}
+
+.tracker-tools button {
+  display:grid;
+  width:46px;
+  height:46px;
+  min-height:46px;
+  padding:0;
+  place-items:center;
+  border-radius:50%;
+}
+
+.tracker-tools button svg {
+  width:24px;
+  height:24px;
+  fill:none;
+  stroke:#fff;
+  stroke-width:1.8;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}

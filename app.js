@@ -2294,6 +2294,21 @@
     undoRestoreBtn.hidden = !safeStorageGet(PRE_RESTORE_PROGRESS_KEY);
   }
 
+  let backupDialogScrollY = 0;
+
+  function lockPageForBackupDialog() {
+    backupDialogScrollY = window.scrollY;
+    document.body.style.top = `-${backupDialogScrollY}px`;
+    document.body.classList.add('backup-dialog-open');
+  }
+
+  function unlockPageForBackupDialog() {
+    if (!document.body.classList.contains('backup-dialog-open')) return;
+    document.body.classList.remove('backup-dialog-open');
+    document.body.style.top = '';
+    window.scrollTo(0,backupDialogScrollY);
+  }
+
   function openBackupDialog() {
     pendingRestore = null;
     backupFileInput.value = '';
@@ -2301,6 +2316,7 @@
     backupRestoreStatus.dataset.state = '';
     backupRestoreStatus.textContent = 'No backup selected.';
     updateUndoRestoreButton();
+    lockPageForBackupDialog();
     backupDialog.showModal();
   }
 
@@ -2968,6 +2984,7 @@
   confirmRestoreBtn.addEventListener('click',restoreSelectedBackup);
   undoRestoreBtn.addEventListener('click',undoLastRestore);
   document.getElementById('closeBackupBtn').addEventListener('click',() => backupDialog.close());
+  backupDialog.addEventListener('close',unlockPageForBackupDialog);
 
   spriteSearchInput.addEventListener('input',renderSpriteSearchResults);
   spriteSearchInput.addEventListener('focus',() => {
@@ -3092,6 +3109,6 @@
   const activeHash = isUnownedPage() ? `#${missingView}` : `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js?v=85',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js?v=86',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
   }
 })();

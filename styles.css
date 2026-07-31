@@ -140,7 +140,7 @@ button:focus-visible,a:focus-visible,input:focus-visible { outline:3px solid #9b
 .visually-hidden { position:absolute!important; width:1px!important; height:1px!important; padding:0!important; margin:-1px!important; overflow:hidden!important; clip:rect(0,0,0,0)!important; white-space:nowrap!important; border:0!important; }
 .skip-link { position:fixed; left:12px; top:8px; z-index:100; transform:translateY(-150%); padding:10px 14px; color:#10122f; background:#fff; border-radius:10px; font-weight:900; }
 .skip-link:focus { transform:translateY(0); }
-<link rel="stylesheet" href="styles.css?v=83">
+
 .app-shell { --shell-inline:12px; position:relative; z-index:1; width:min(100%,1080px); margin:0 auto; padding:0 var(--shell-inline) calc(34px + var(--safe-bottom)); }
 .hero {
   position:relative;

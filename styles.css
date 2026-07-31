@@ -341,7 +341,6 @@ content: "";
   background-image:
     radial-gradient(ellipse at 14% 4%,var(--rarity-haze),transparent 38%),
     radial-gradient(ellipse at 88% 36%,var(--rarity-sheen),transparent 42%),
-    repeating-linear-gradient(128deg,rgba(255,255,255,.022) 0 1px,transparent 1px 13px),
     linear-gradient(180deg,rgba(3,5,15,.12),rgba(3,5,15,.36)),
     var(--theme-page-image);
   background-position:center,center,center,center,center;

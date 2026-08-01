@@ -159,6 +159,10 @@
     holofoil:'assets/variant-backgrounds/variant-well-holofoil.webp'
   };
 
+  const FEATURED_VARIANT_BACKGROUNDS = Object.freeze({
+    'custom-john-wick':'assets/variant-backgrounds/variant-well-john-wick.webp?v=92'
+  });
+
   const DEFAULT_PAGE_BACKGROUNDS = {
     Rare:{ enabled:true, color:'#031328', image:'assets/page-backgrounds/page-bg-rare.webp', mode:'cover' },
     Epic:{ enabled:true, color:'#12071d', image:'assets/page-backgrounds/page-bg-epic.webp', mode:'cover' },
@@ -343,6 +347,40 @@
     normalizeDesign(window.PUBLISHED_DESIGN && typeof window.PUBLISHED_DESIGN === 'object' ? window.PUBLISHED_DESIGN : {}),
     window.SPRITE_ART_CONFIG
   );
+  const johnWickFamilyId = 'custom-john-wick';
+  const hasJohnWickFamily = baseData.some((family) => family?.id === johnWickFamilyId)
+    || design.customFamilies.some((family) => family?.id === johnWickFamilyId);
+  if (!hasJohnWickFamily) {
+    design.customFamilies.push({
+      id:johnWickFamilyId,
+      name:'John Wick',
+      rarity:'Mythic',
+      seasonId:CURRENT_SEASON_ID,
+      variants:[{ id:'base', name:'Base', image:'' }]
+    });
+    design.families[johnWickFamilyId] = {
+      ...(design.families[johnWickFamilyId] || {}),
+      name:'John Wick',
+      rarity:'Mythic',
+      seasonId:CURRENT_SEASON_ID,
+      visible:true,
+      deleted:false,
+      variants:{
+        ...(design.families[johnWickFamilyId]?.variants || {}),
+        base:{
+          ...(design.families[johnWickFamilyId]?.variants?.base || {}),
+          image:'published-assets/sprite-custom-john-wick-base.webp',
+          rarityPercentage:'0%'
+        }
+      },
+      addedVariants:Array.isArray(design.families[johnWickFamilyId]?.addedVariants)
+        ? design.families[johnWickFamilyId].addedVariants
+        : [],
+      order:Array.isArray(design.families[johnWickFamilyId]?.order)
+        ? design.families[johnWickFamilyId].order
+        : ['base']
+    };
+  }
   let state = loadProgress();
   let spriteCardEdits = loadSpriteCardEdits();
   let spriteViewModes = loadViewModes();
@@ -1329,7 +1367,9 @@
     applySummaryPositions();
   }
 
-  function variantBackgroundSource(variant) {
+  function variantBackgroundSource(variant,family = null) {
+    const featured = family?.id ? FEATURED_VARIANT_BACKGROUNDS[family.id] : '';
+    if (featured) return featured;
     if (!design.theme.useVariantBackgrounds) return '';
     const backgrounds = design.theme.variantBackgrounds || {};
     const idKey = normalizeVariantBackgroundKey(variant.id);
@@ -1338,8 +1378,8 @@
     return nameKey && hasOwn(backgrounds,nameKey) ? backgrounds[nameKey] || '' : '';
   }
 
-  function applyVariantBackground(element,variant) {
-    const source = variantBackgroundSource(variant);
+  function applyVariantBackground(element,variant,family = null) {
+    const source = variantBackgroundSource(variant,family);
     if (!source) return;
     applyCustomBackground(element,design.theme.wellBgColor,source,design.theme.variantBgMode || 'cover');
     element.classList.add('has-variant-background');
@@ -1415,7 +1455,7 @@
 
     const imageWrap = document.createElement('div');
     imageWrap.className = 'image-wrap';
-    applyVariantBackground(imageWrap,variant);
+    applyVariantBackground(imageWrap,variant,family);
     const imageButton = document.createElement('button');
     imageButton.type = 'button';
     imageButton.className = 'image-button';
@@ -2439,7 +2479,7 @@
           rarity,
           rarityPercentage:view.rarityPercentage || '',
           image:displayImageSource(view.image),
-          background:displayImageSource(variantBackgroundSource(variant)),
+          background:displayImageSource(variantBackgroundSource(variant,family)),
           previousSeason:isPreviousSeasonSprite(family,variant),
           collected:current.collected === true || current.mastered === true,
           mastered:current.mastered === true
@@ -3118,6 +3158,6 @@
   const activeHash = isUnownedPage() ? `#${missingView}` : `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js?v=90',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js?v=92',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
   }
 })();

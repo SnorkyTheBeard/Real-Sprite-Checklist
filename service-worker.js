@@ -1,12 +1,12 @@
-const CACHE = 'galaxy-sprite-checklist-v90';
+const CACHE = 'galaxy-sprite-checklist-v92';
 const CORE = [
   './',
   './index.html',
-  './styles.css?v=90',
+  './styles.css?v=92',
   './published-design.js',
   './art-config.js?v=67',
   './data.js?v=82',
-  './app.js?v=90',
+  './app.js?v=92',
   './manifest.webmanifest?v=67',
   './fonts/Burbank Big Condensed Black.otf',
   './fonts/Fredoka-Regular.woff2',
@@ -29,6 +29,8 @@ const CORE = [
   './assets/variant-backgrounds/variant-well-gem.webp',
   './assets/variant-backgrounds/variant-well-quack.webp',
   './assets/variant-backgrounds/variant-well-holofoil.webp',
+  './assets/variant-backgrounds/variant-well-john-wick.webp?v=92',
+  './published-assets/sprite-custom-john-wick-base.webp',
   './assets/page-backgrounds/page-bg-rare.webp',
   './assets/page-backgrounds/page-bg-epic.webp',
   './assets/page-backgrounds/page-bg-legendary.webp',

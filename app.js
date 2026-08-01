@@ -1753,13 +1753,17 @@
   function handleTabKeys(event) {
     if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
     event.preventDefault();
-    const currentIndex = pageTabs.indexOf(activeRarity);
+    const tabButtons = Array.from(tabsEl.querySelectorAll('[role="tab"]'));
+    const currentIndex = tabButtons.indexOf(event.currentTarget);
+    if (currentIndex < 0 || !tabButtons.length) return;
     let nextIndex = currentIndex;
-    if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + pageTabs.length) % pageTabs.length;
-    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % pageTabs.length;
+    if (event.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabButtons.length) % tabButtons.length;
+    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabButtons.length;
     if (event.key === 'Home') nextIndex = 0;
-    if (event.key === 'End') nextIndex = pageTabs.length - 1;
-    switchRarity(pageTabs[nextIndex],{ historyMode:'push', focusTab:true, announce:true });
+    if (event.key === 'End') nextIndex = tabButtons.length - 1;
+    const targetId = tabButtons[nextIndex].id;
+    tabButtons[nextIndex].click();
+    requestAnimationFrame(() => document.getElementById(targetId)?.focus());
   }
 
   function renderTabs() {
@@ -1768,25 +1772,24 @@
     const unmastered = unmasteredCount();
     pageTabs.forEach((rarity) => {
       if (rarity === UNOWNED_PAGE) {
-        const select = document.createElement('select');
-        const placeholder = document.createElement('option');
-        const unownedOption = document.createElement('option');
-        const unmasteredOption = document.createElement('option');
-        select.id = 'tab-unowned';
-        select.className = 'tab missing-filter-select';
-        select.setAttribute('aria-label',`Missing Sprite view: ${missing} unowned and ${unmastered} unmastered`);
-        select.setAttribute('aria-selected',String(isUnownedPage()));
-        placeholder.value = '';
-        placeholder.textContent = 'Missing Sprites';
-        placeholder.disabled = true;
-        unownedOption.value = 'unowned';
-        unownedOption.textContent = `Unowned (${missing})`;
-        unmasteredOption.value = 'unmastered';
-        unmasteredOption.textContent = `Unmastered (${unmastered})`;
-        select.append(placeholder,unownedOption,unmasteredOption);
-        select.value = isUnownedPage() ? missingView : '';
-        select.addEventListener('change',() => setMissingView(select.value,{ historyMode:'push', announce:true }));
-        tabsEl.appendChild(select);
+        const addMissingTab = (view,label,count) => {
+          const button = document.createElement('button');
+          const selected = isUnownedPage() && missingView === view;
+          button.type = 'button';
+          button.id = `tab-${view}`;
+          button.className = 'tab missing-filter-tab';
+          button.setAttribute('role','tab');
+          button.setAttribute('aria-controls','checklistPage');
+          button.setAttribute('aria-selected',String(selected));
+          button.setAttribute('aria-label',`${count} ${label.toLowerCase()} Sprites`);
+          button.tabIndex = selected ? 0 : -1;
+          button.textContent = `${label} (${count})`;
+          button.addEventListener('click',() => setMissingView(view,{ historyMode:'push', announce:true }));
+          button.addEventListener('keydown',handleTabKeys);
+          tabsEl.appendChild(button);
+        };
+        addMissingTab('unowned','Unowned',missing);
+        addMissingTab('unmastered','Unmastered',unmastered);
         return;
       }
       const stats = rarity === UNOWNED_PAGE ? null : rarityStats(rarity);
@@ -1974,11 +1977,15 @@
       const stats = rarityStats(rarity);
       tab.querySelector('small').textContent = `${stats.collected}/${stats.total}`;
     });
-    const missingSelect = document.getElementById('tab-unowned');
-    if (missingSelect) {
-      missingSelect.querySelector('option[value="unowned"]').textContent = `Unowned (${missing})`;
-      missingSelect.querySelector('option[value="unmastered"]').textContent = `Unmastered (${unmastered})`;
-      missingSelect.setAttribute('aria-label',`Missing Sprite view: ${missing} unowned and ${unmastered} unmastered`);
+    const unownedTab = document.getElementById('tab-unowned');
+    const unmasteredTab = document.getElementById('tab-unmastered');
+    if (unownedTab) {
+      unownedTab.textContent = `Unowned (${missing})`;
+      unownedTab.setAttribute('aria-label',`${missing} unowned Sprites`);
+    }
+    if (unmasteredTab) {
+      unmasteredTab.textContent = `Unmastered (${unmastered})`;
+      unmasteredTab.setAttribute('aria-label',`${unmastered} unmastered Sprites`);
     }
   }
 
@@ -2007,7 +2014,9 @@
     const hash = options.hash || `#${rarity.toLowerCase()}`;
     if (options.historyMode === 'push' && location.hash !== hash) history.pushState({ rarity },'',hash);
     else if (location.hash !== hash) history.replaceState({ rarity },'',hash);
-    const activeTab = document.getElementById(`tab-${rarity.toLowerCase()}`);
+    const activeTab = document.getElementById(
+      rarity === UNOWNED_PAGE ? `tab-${missingView}` : `tab-${rarity.toLowerCase()}`
+    );
     activeTab?.scrollIntoView({ block:'nearest', inline:'center' });
     if (options.focusTab) activeTab?.focus();
     if (options.announce && changed) showToast(`${rarity} page`);
@@ -3109,6 +3118,6 @@
   const activeHash = isUnownedPage() ? `#${missingView}` : `#${activeRarity.toLowerCase()}`;
   if (location.hash !== activeHash) history.replaceState({ rarity:activeRarity },'',activeHash);
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./service-worker.js?v=89',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js?v=90',{ updateViaCache:'none' }).then((registration) => registration.update()).catch(() => {});
   }
 })();

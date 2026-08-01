@@ -36,6 +36,8 @@
   <link rel="preload" as="image" type="image/webp" href="assets/variant-backgrounds/variant-well-gummy.webp">
   <link rel="preload" as="image" type="image/webp" href="assets/variant-backgrounds/variant-well-galaxy.webp">
   <link rel="preload" as="image" type="image/webp" href="assets/variant-backgrounds/variant-well-john-wick.webp?v=92">
+  <link rel="preload" as="image" type="image/webp" href="assets/page-backgrounds/page-bg-unowned.webp?v=93">
+  <link rel="preload" as="image" type="image/webp" href="assets/page-backgrounds/page-bg-unmastered.webp?v=93">
   <script src="published-design.js?v=67" fetchpriority="high"></script>
   <script src="art-config.js?v=67"></script>
   <script>
@@ -130,6 +132,15 @@
           if (pageConfig.color) pageColor = pageConfig.color;
         }
       }
+      if (hashName === 'unowned') {
+        pageImage = 'assets/page-backgrounds/page-bg-unowned.webp?v=93';
+        pageColor = '#06101f';
+        pageFit = 'cover';
+      } else if (hashName === 'unmastered') {
+        pageImage = 'assets/page-backgrounds/page-bg-unmastered.webp?v=93';
+        pageColor = '#100a18';
+        pageFit = 'cover';
+      }
       set('--theme-page-bg',pageColor);
       setImage('page',pageImage,pageFit);
       if (pageImage) {
@@ -141,7 +152,7 @@
       }
     })();
   </script>
-<link rel="stylesheet" href="styles.css?v=92">
+<link rel="stylesheet" href="styles.css?v=93">
 </head>
 <body>
   <a class="skip-link" href="#mainContent">Skip to checklist</a>
@@ -218,6 +229,13 @@
             <button class="publish-sprites-button" id="publishSpritesBtn" type="button">No changes to publish</button>
           </div>
         </header>
+        <section class="missing-recent-changes" id="missingRecentChanges" aria-labelledby="missingRecentTitle" hidden>
+          <div class="missing-recent-heading">
+            <h3 id="missingRecentTitle">Recently changed</h3>
+            <span id="missingRecentDescription"></span>
+          </div>
+          <div class="missing-recent-list" id="missingRecentList"></div>
+        </section>
         <div id="collections"></div>
         <p class="page-swipe-hint">Swipe a sprite row left or right to see every variant.</p>
       </section>
@@ -375,6 +393,6 @@
   <noscript>This checklist needs JavaScript enabled to save progress.</noscript>
 
   <script src="data.js?v=82"></script>
-  <script src="app.js?v=92"></script>
+  <script src="app.js?v=93"></script>
 </body>
 </html>
